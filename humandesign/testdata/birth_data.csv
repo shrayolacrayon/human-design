@@ -1,0 +1,6 @@
+name,datetime,latitude,longitude,location,expected_type,expected_authority,expected_profile_conscious,expected_profile_unconscious,expected_strategy
+Steve Jobs,1955-02-24T19:15:00Z,37.7749,-122.4194,"San Francisco, CA",Manifestor,Splenic,5,1,Inform Before Acting
+Oprah Winfrey,1954-01-29T16:30:00Z,34.1962,-89.9711,"Kosciusko, MS",Generator,Emotional (Solar Plexus),4,6,Wait to Respond
+Albert Einstein,1879-03-14T11:30:00Z,48.4011,9.9876,"Ulm, Germany",Projector,Splenic,1,4,Wait for the Invitation
+Nikola Tesla,1856-07-10T00:00:00Z,44.5553,15.3678,"Smiljan, Croatia",Manifestor,Splenic,5,2,Inform Before Acting
+Marie Curie,1867-11-07T12:00:00Z,52.2297,21.0122,"Warsaw, Poland",Generator,Emotional (Solar Plexus),6,2,Wait to Respond

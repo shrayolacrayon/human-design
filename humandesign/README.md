@@ -9,6 +9,9 @@ A Go web application that generates Human Design readings with body graph visual
 - **Human Design Calculations**: Determines Type, Authority, Profile, Strategy, and more
 - **Body Graph Visualization**: SVG-based visualization of defined/undefined centers and channels
 - **REST API**: JSON endpoints for integration with other applications
+- **CLI Tool**: Command-line interface for batch calculations and testing
+- **CSV Integration**: Read birth data from CSV files for batch processing
+- **Comprehensive Testing**: Unit tests, integration tests, and validation framework
 
 ## Quick Start with Docker (Recommended)
 
@@ -68,21 +71,33 @@ humandesign/
 ├── Dockerfile              # Docker build configuration
 ├── docker-compose.yml      # Docker Compose for easy startup
 ├── cmd/
-│   └── server/
-│       └── main.go         # Application entry point
+│   ├── server/
+│   │   └── main.go         # Web server entry point
+│   └── cli/
+│       └── main.go         # CLI tool entry point
 ├── internal/
 │   ├── calculator/
 │   │   ├── types.go        # Data structures and types
 │   │   ├── gates.go        # Gate and channel definitions (36 channels)
-│   │   └── calculator.go   # Main calculation logic
+│   │   ├── calculator.go   # Main calculation logic
+│   │   ├── gates_test.go   # Unit tests for gates
+│   │   └── calculator_test.go # Unit tests for calculator
+│   ├── csvreader/
+│   │   ├── csvreader.go    # CSV reading/writing functionality
+│   │   └── csvreader_test.go # CSV reader tests
 │   ├── ephemeris/
 │   │   └── ephemeris.go    # Swiss Ephemeris integration via cgo
 │   ├── bodygraph/
 │   │   └── generator.go    # SVG body graph generation
 │   └── handlers/
 │       └── handlers.go     # HTTP request handlers
+├── testdata/
+│   ├── birth_data.csv      # Test cases with famous people
+│   └── gate_validation.csv # Gate and channel validation tests
+├── integration_test.go     # Integration tests
 ├── go.mod
-└── README.md
+├── README.md
+└── TESTING.md             # Comprehensive testing guide
 ```
 
 ## API Endpoints
@@ -105,6 +120,76 @@ Generate a Human Design reading (returns HTML).
 
 ### POST /api/reading/json
 Generate a Human Design reading (returns JSON).
+
+**Response includes:**
+- Type (Generator, Manifestor, Projector, Reflector, Manifesting Generator)
+- Authority (Emotional, Sacral, Splenic, Ego, Self, Environmental, Lunar)
+- Profile (1-6 combinations)
+- Strategy
+- Signature and Not-Self Theme
+- Centers (defined/undefined)
+- Channels (defined)
+- Gates (Personality and Design)
+- Incarnation Cross
+
+## CLI Tool
+
+### Building the CLI
+
+```bash
+cd humandesign/cmd/cli
+go build -o humandesign-cli
+```
+
+### CLI Commands
+
+```bash
+# Calculate reading from individual parameters
+humandesign-cli calculate \
+  -name "John Doe" \
+  -date "1990-06-15T14:30:00Z" \
+  -lat 40.7128 \
+  -lon -74.0060 \
+  -location "New York, NY"
+
+# Calculate from CSV file
+humandesign-cli calculate -csv testdata/birth_data.csv -output json
+
+# Validate test cases
+humandesign-cli validate -csv testdata/birth_data.csv -verbose
+
+# Show help
+humandesign-cli help
+```
+
+### CSV Format
+
+```csv
+name,datetime,latitude,longitude,location,expected_type,expected_authority,expected_profile_conscious,expected_profile_unconscious,expected_strategy
+Steve Jobs,1955-02-24T19:15:00Z,37.7749,-122.4194,"San Francisco, CA",Manifestor,Splenic,5,1,Inform Before Acting
+```
+
+See `TESTING.md` for complete CLI documentation and CSV format details.
+
+## Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# Run integration tests
+go test -v -run Integration
+
+# Validate test data
+humandesign-cli validate -csv testdata/birth_data.csv
+```
+
+For comprehensive testing documentation, see [TESTING.md](TESTING.md).
 
 ## Understanding Human Design
 
