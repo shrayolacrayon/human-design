@@ -6,17 +6,27 @@ import (
 	"fmt"
 	"humandesign/internal/calculator"
 	"humandesign/internal/csvreader"
+	"humandesign/internal/storage"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 const version = "1.0.0"
 
+// Default data directory for person storage
+var defaultDataDir = filepath.Join(".", "data", "people")
+
 func main() {
 	// Define subcommands
 	calculateCmd := flag.NewFlagSet("calculate", flag.ExitOnError)
 	validateCmd := flag.NewFlagSet("validate", flag.ExitOnError)
+	saveCmd := flag.NewFlagSet("save", flag.ExitOnError)
+	loadCmd := flag.NewFlagSet("load", flag.ExitOnError)
+	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
+	searchCmd := flag.NewFlagSet("search", flag.ExitOnError)
+	deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)
 	versionCmd := flag.NewFlagSet("version", flag.ExitOnError)
 
 	// Calculate command flags
@@ -33,6 +43,38 @@ func main() {
 	valOutput := validateCmd.String("output", "text", "Output format: text or json")
 	valVerbose := validateCmd.Bool("verbose", false, "Verbose output")
 
+	// Save command flags
+	saveName := saveCmd.String("name", "", "Person's name (required)")
+	saveDate := saveCmd.String("date", "", "Birth date (RFC3339 format, required)")
+	saveLat := saveCmd.Float64("lat", 0, "Birth latitude (required)")
+	saveLon := saveCmd.Float64("lon", 0, "Birth longitude (required)")
+	saveLoc := saveCmd.String("location", "", "Birth location name (required)")
+	saveEmail := saveCmd.String("email", "", "Person's email (optional)")
+	saveNotes := saveCmd.String("notes", "", "Notes about the person (optional)")
+	saveTags := saveCmd.String("tags", "", "Comma-separated tags (optional)")
+	saveDataDir := saveCmd.String("datadir", defaultDataDir, "Data directory")
+
+	// Load command flags
+	loadName := loadCmd.String("name", "", "Person's name")
+	loadID := loadCmd.String("id", "", "Person's ID")
+	loadOutput := loadCmd.String("output", "text", "Output format: text or json")
+	loadDataDir := loadCmd.String("datadir", defaultDataDir, "Data directory")
+
+	// List command flags
+	listTags := listCmd.String("tags", "", "Filter by tags (comma-separated)")
+	listOutput := listCmd.String("output", "text", "Output format: text or json")
+	listDataDir := listCmd.String("datadir", defaultDataDir, "Data directory")
+
+	// Search command flags
+	searchQuery := searchCmd.String("query", "", "Search query (required)")
+	searchOutput := searchCmd.String("output", "text", "Output format: text or json")
+	searchDataDir := searchCmd.String("datadir", defaultDataDir, "Data directory")
+
+	// Delete command flags
+	deleteName := deleteCmd.String("name", "", "Person's name")
+	deleteID := deleteCmd.String("id", "", "Person's ID")
+	deleteDataDir := deleteCmd.String("datadir", defaultDataDir, "Data directory")
+
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)
@@ -45,6 +87,21 @@ func main() {
 	case "validate":
 		validateCmd.Parse(os.Args[2:])
 		handleValidate(*valCSV, *valOutput, *valVerbose)
+	case "save":
+		saveCmd.Parse(os.Args[2:])
+		handleSave(*saveName, *saveDate, *saveLat, *saveLon, *saveLoc, *saveEmail, *saveNotes, *saveTags, *saveDataDir)
+	case "load":
+		loadCmd.Parse(os.Args[2:])
+		handleLoad(*loadName, *loadID, *loadOutput, *loadDataDir)
+	case "list":
+		listCmd.Parse(os.Args[2:])
+		handleList(*listTags, *listOutput, *listDataDir)
+	case "search":
+		searchCmd.Parse(os.Args[2:])
+		handleSearch(*searchQuery, *searchOutput, *searchDataDir)
+	case "delete":
+		deleteCmd.Parse(os.Args[2:])
+		handleDelete(*deleteName, *deleteID, *deleteDataDir)
 	case "version":
 		versionCmd.Parse(os.Args[2:])
 		fmt.Printf("Human Design CLI v%s\n", version)
@@ -66,6 +123,11 @@ func printUsage() {
 	fmt.Println("Commands:")
 	fmt.Println("  calculate    Calculate Human Design reading")
 	fmt.Println("  validate     Validate readings against CSV test cases")
+	fmt.Println("  save         Save a person to the database")
+	fmt.Println("  load         Load a person from the database")
+	fmt.Println("  list         List all people in the database")
+	fmt.Println("  search       Search for people by name")
+	fmt.Println("  delete       Delete a person from the database")
 	fmt.Println("  version      Show version information")
 	fmt.Println("  help         Show this help message")
 	fmt.Println()
@@ -87,11 +149,17 @@ func printUsage() {
 	fmt.Println("  # Calculate from individual parameters")
 	fmt.Println("  humandesign-cli calculate -name \"John Doe\" -date 1990-06-15T14:30:00Z -lat 40.7128 -lon -74.0060 -location \"New York\"")
 	fmt.Println()
-	fmt.Println("  # Calculate from CSV file")
-	fmt.Println("  humandesign-cli calculate -csv testdata/birth_data.csv -output json")
+	fmt.Println("  # Save a person to the database")
+	fmt.Println("  humandesign-cli save -name \"John Doe\" -date 1990-06-15T14:30:00Z -lat 40.7128 -lon -74.0060 -location \"New York\" -tags \"family,friends\"")
 	fmt.Println()
-	fmt.Println("  # Validate against test cases")
-	fmt.Println("  humandesign-cli validate -csv testdata/birth_data.csv -verbose")
+	fmt.Println("  # Load a person from the database")
+	fmt.Println("  humandesign-cli load -name \"John Doe\"")
+	fmt.Println()
+	fmt.Println("  # List all people")
+	fmt.Println("  humandesign-cli list")
+	fmt.Println()
+	fmt.Println("  # Search for people")
+	fmt.Println("  humandesign-cli search -query \"John\"")
 }
 
 func handleCalculate(csvFile, name, date string, lat, lon float64, location, output string) {
@@ -408,5 +476,279 @@ func printResultsCSV(readings []calculator.Reading) {
 			reading.NotSelfTheme,
 			reading.IncarnationCross,
 		)
+	}
+}
+
+// Person management handlers
+
+func handleSave(name, date string, lat, lon float64, location, email, notes, tags, dataDir string) {
+	if name == "" || date == "" || location == "" {
+		fmt.Fprintf(os.Stderr, "Error: -name, -date, and -location are required\n")
+		os.Exit(1)
+	}
+
+	// Parse date
+	dateTime, err := time.Parse(time.RFC3339, date)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing date: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Create birth data
+	birthData := calculator.BirthData{
+		DateTime:  dateTime,
+		Latitude:  lat,
+		Longitude: lon,
+		Location:  location,
+	}
+
+	// Calculate reading
+	calc := calculator.NewCalculator()
+	reading, err := calc.Calculate(birthData)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error calculating reading: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Parse tags
+	var tagList []string
+	if tags != "" {
+		tagList = strings.Split(tags, ",")
+		for i := range tagList {
+			tagList[i] = strings.TrimSpace(tagList[i])
+		}
+	}
+
+	// Create person
+	person := &storage.Person{
+		Name:      name,
+		Email:     email,
+		Notes:     notes,
+		BirthData: birthData,
+		Reading:   reading,
+		Tags:      tagList,
+	}
+
+	// Initialize storage
+	store, err := storage.NewFileStore(dataDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing storage: %v\n", err)
+		os.Exit(1)
+	}
+	defer store.Close()
+
+	// Save person
+	if err := store.Create(person); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving person: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Saved %s (ID: %s)\n", person.Name, person.ID)
+	fmt.Printf("  Type: %s\n", reading.Type)
+	fmt.Printf("  Authority: %s\n", reading.Authority)
+	fmt.Printf("  Profile: %d/%d - %s\n", reading.Profile.Conscious, reading.Profile.Unconscious, reading.Profile.Name)
+	fmt.Printf("  Strategy: %s\n", reading.Strategy)
+}
+
+func handleLoad(name, id, output, dataDir string) {
+	if name == "" && id == "" {
+		fmt.Fprintf(os.Stderr, "Error: -name or -id is required\n")
+		os.Exit(1)
+	}
+
+	// Initialize storage
+	store, err := storage.NewFileStore(dataDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing storage: %v\n", err)
+		os.Exit(1)
+	}
+	defer store.Close()
+
+	// Load person
+	var person *storage.Person
+	if id != "" {
+		person, err = store.Get(id)
+	} else {
+		person, err = store.GetByName(name)
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading person: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Output person
+	if output == "json" {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(person); err != nil {
+			fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+		}
+	} else {
+		printPersonText(person)
+	}
+}
+
+func handleList(tags, output, dataDir string) {
+	// Parse tags
+	var tagList []string
+	if tags != "" {
+		tagList = strings.Split(tags, ",")
+		for i := range tagList {
+			tagList[i] = strings.TrimSpace(tagList[i])
+		}
+	}
+
+	// Initialize storage
+	store, err := storage.NewFileStore(dataDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing storage: %v\n", err)
+		os.Exit(1)
+	}
+	defer store.Close()
+
+	// List people
+	summaries, err := store.List(tagList)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing people: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(summaries) == 0 {
+		fmt.Println("No people found in database")
+		return
+	}
+
+	// Output summaries
+	if output == "json" {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(summaries); err != nil {
+			fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+		}
+	} else {
+		fmt.Printf("Found %d people:\n\n", len(summaries))
+		for _, summary := range summaries {
+			fmt.Printf("%-30s | Type: %-25s | Authority: %-25s | Profile: %s\n",
+				summary.Name,
+				summary.Type,
+				summary.Authority,
+				summary.Profile,
+			)
+			if len(summary.Tags) > 0 {
+				fmt.Printf("  Tags: %s\n", strings.Join(summary.Tags, ", "))
+			}
+		}
+	}
+}
+
+func handleSearch(query, output, dataDir string) {
+	if query == "" {
+		fmt.Fprintf(os.Stderr, "Error: -query is required\n")
+		os.Exit(1)
+	}
+
+	// Initialize storage
+	store, err := storage.NewFileStore(dataDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing storage: %v\n", err)
+		os.Exit(1)
+	}
+	defer store.Close()
+
+	// Search
+	summaries, err := store.Search(query)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error searching: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(summaries) == 0 {
+		fmt.Printf("No people found matching '%s'\n", query)
+		return
+	}
+
+	// Output summaries
+	if output == "json" {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(summaries); err != nil {
+			fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+		}
+	} else {
+		fmt.Printf("Found %d people matching '%s':\n\n", len(summaries), query)
+		for _, summary := range summaries {
+			fmt.Printf("%-30s | Type: %-25s | Authority: %-25s\n",
+				summary.Name,
+				summary.Type,
+				summary.Authority,
+			)
+		}
+	}
+}
+
+func handleDelete(name, id, dataDir string) {
+	if name == "" && id == "" {
+		fmt.Fprintf(os.Stderr, "Error: -name or -id is required\n")
+		os.Exit(1)
+	}
+
+	// Initialize storage
+	store, err := storage.NewFileStore(dataDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing storage: %v\n", err)
+		os.Exit(1)
+	}
+	defer store.Close()
+
+	// Get person to confirm deletion
+	var person *storage.Person
+	if id != "" {
+		person, err = store.Get(id)
+	} else {
+		person, err = store.GetByName(name)
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error finding person: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Confirm deletion
+	fmt.Printf("Are you sure you want to delete %s (ID: %s)? [y/N]: ", person.Name, person.ID)
+	var response string
+	fmt.Scanln(&response)
+
+	if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
+		fmt.Println("Deletion cancelled")
+		return
+	}
+
+	// Delete person
+	if err := store.Delete(person.ID); err != nil {
+		fmt.Fprintf(os.Stderr, "Error deleting person: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Deleted %s\n", person.Name)
+}
+
+func printPersonText(person *storage.Person) {
+	fmt.Printf("Person: %s\n", person.Name)
+	fmt.Printf("ID: %s\n", person.ID)
+	if person.Email != "" {
+		fmt.Printf("Email: %s\n", person.Email)
+	}
+	if person.Notes != "" {
+		fmt.Printf("Notes: %s\n", person.Notes)
+	}
+	if len(person.Tags) > 0 {
+		fmt.Printf("Tags: %s\n", strings.Join(person.Tags, ", "))
+	}
+	fmt.Printf("Created: %s\n", person.CreatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Printf("Updated: %s\n\n", person.UpdatedAt.Format("2006-01-02 15:04:05"))
+
+	if person.Reading != nil {
+		printReadingText(*person.Reading)
 	}
 }

@@ -11,6 +11,7 @@ A Go web application that generates Human Design readings with body graph visual
 - **REST API**: JSON endpoints for integration with other applications
 - **CLI Tool**: Command-line interface for batch calculations and testing
 - **CSV Integration**: Read birth data from CSV files for batch processing
+- **Person Storage**: Filesystem-based database for storing and managing people
 - **Comprehensive Testing**: Unit tests, integration tests, and validation framework
 
 ## Quick Start with Docker (Recommended)
@@ -85,6 +86,10 @@ humandesign/
 │   ├── csvreader/
 │   │   ├── csvreader.go    # CSV reading/writing functionality
 │   │   └── csvreader_test.go # CSV reader tests
+│   ├── storage/
+│   │   ├── types.go        # Person schema and storage interface
+│   │   ├── filestore.go    # Filesystem storage implementation
+│   │   └── filestore_test.go # Storage tests
 │   ├── ephemeris/
 │   │   └── ephemeris.go    # Swiss Ephemeris integration via cgo
 │   ├── bodygraph/
@@ -97,7 +102,8 @@ humandesign/
 ├── integration_test.go     # Integration tests
 ├── go.mod
 ├── README.md
-└── TESTING.md             # Comprehensive testing guide
+├── TESTING.md             # Comprehensive testing guide
+└── STORAGE.md             # Storage system documentation
 ```
 
 ## API Endpoints
@@ -190,6 +196,52 @@ humandesign-cli validate -csv testdata/birth_data.csv
 ```
 
 For comprehensive testing documentation, see [TESTING.md](TESTING.md).
+
+## Person Storage
+
+The project includes a filesystem-based storage system for managing people and their Human Design readings.
+
+### Quick Start
+
+```bash
+# Save a person to the database
+humandesign-cli save \
+  -name "John Doe" \
+  -date "1990-06-15T14:30:00Z" \
+  -lat 40.7128 \
+  -lon -74.0060 \
+  -location "New York, NY" \
+  -tags "family,friends"
+
+# Load a person
+humandesign-cli load -name "John Doe"
+
+# List all people
+humandesign-cli list
+
+# Search for people
+humandesign-cli search -query "John"
+```
+
+### Features
+
+- **JSON file storage** - One file per person
+- **Database-ready schema** - Easy migration to PostgreSQL/MongoDB
+- **Optimistic locking** - Prevents concurrent update conflicts
+- **Tags** - Organize people by categories
+- **Search** - Find people by name
+- **Atomic writes** - No corruption from partial writes
+
+### Data Location
+
+By default, people are stored in `./data/people/` as JSON files:
+```
+data/people/550e8400-e29b-41d4-a716-446655440000.json
+```
+
+Each file contains the person's birth data and complete Human Design reading.
+
+For complete storage documentation, see [STORAGE.md](STORAGE.md).
 
 ## Understanding Human Design
 
