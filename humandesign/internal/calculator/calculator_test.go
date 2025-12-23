@@ -40,7 +40,7 @@ func TestDetermineType(t *testing.T) {
 			expectedType:  TypeManifestingGenerator,
 		},
 		{
-			name:          "Projector - No sacral, no motor to throat",
+			name:          "Projector - No sacral, no motor to throat, but other centers defined",
 			sacralDefined: false,
 			throatDefined: false,
 			motorDefined:  false,
@@ -52,6 +52,13 @@ func TestDetermineType(t *testing.T) {
 			throatDefined: true,
 			motorDefined:  true,
 			expectedType:  TypeManifestor,
+		},
+		{
+			name:          "Reflector - No centers defined",
+			sacralDefined: false,
+			throatDefined: false,
+			motorDefined:  false,
+			expectedType:  TypeReflector,
 		},
 	}
 
@@ -70,6 +77,13 @@ func TestDetermineType(t *testing.T) {
 			centers["Throat"].Defined = test.throatDefined
 			if test.motorDefined {
 				centers["Heart"].Defined = true
+			}
+
+			// For Projector test, define some non-motor centers (Ajna, G)
+			// to distinguish from Reflector (which has NO centers defined)
+			if test.name == "Projector - No sacral, no motor to throat, but other centers defined" {
+				centers["Ajna"].Defined = true
+				centers["G"].Defined = true
 			}
 
 			result := calc.determineType(centers)
