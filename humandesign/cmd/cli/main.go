@@ -27,6 +27,7 @@ func main() {
 	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	searchCmd := flag.NewFlagSet("search", flag.ExitOnError)
 	deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)
+	infoCmd := flag.NewFlagSet("info", flag.ExitOnError)
 	versionCmd := flag.NewFlagSet("version", flag.ExitOnError)
 
 	// Calculate command flags
@@ -75,6 +76,13 @@ func main() {
 	deleteID := deleteCmd.String("id", "", "Person's ID")
 	deleteDataDir := deleteCmd.String("datadir", defaultDataDir, "Data directory")
 
+	// Info command flags
+	infoGate := infoCmd.Int("gate", 0, "Look up gate number (1-64)")
+	infoCenter := infoCmd.String("center", "", "Look up center (Head, Ajna, Throat, G, Heart, Sacral, SolarPlexus, Spleen, Root)")
+	infoChannel := infoCmd.String("channel", "", "Look up channel by gates (e.g., '1-8' or '64-47')")
+	infoType := infoCmd.String("type", "", "Look up Human Design type")
+	infoList := infoCmd.String("list", "", "List all: gates, centers, channels, types, authorities, profiles")
+
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)
@@ -102,6 +110,9 @@ func main() {
 	case "delete":
 		deleteCmd.Parse(os.Args[2:])
 		handleDelete(*deleteName, *deleteID, *deleteDataDir)
+	case "info":
+		infoCmd.Parse(os.Args[2:])
+		handleInfo(*infoGate, *infoCenter, *infoChannel, *infoType, *infoList)
 	case "version":
 		versionCmd.Parse(os.Args[2:])
 		fmt.Printf("Human Design CLI v%s\n", version)
@@ -128,6 +139,7 @@ func printUsage() {
 	fmt.Println("  list         List all people in the database")
 	fmt.Println("  search       Search for people by name")
 	fmt.Println("  delete       Delete a person from the database")
+	fmt.Println("  info         Look up information about gates, centers, channels, types")
 	fmt.Println("  version      Show version information")
 	fmt.Println("  help         Show this help message")
 	fmt.Println()
@@ -160,6 +172,12 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("  # Search for people")
 	fmt.Println("  humandesign-cli search -query \"John\"")
+	fmt.Println()
+	fmt.Println("  # Look up gate information")
+	fmt.Println("  humandesign-cli info -gate 14")
+	fmt.Println()
+	fmt.Println("  # List all channels")
+	fmt.Println("  humandesign-cli info -list channels")
 }
 
 func handleCalculate(csvFile, name, date string, lat, lon float64, location, output string) {
@@ -750,5 +768,352 @@ func printPersonText(person *storage.Person) {
 
 	if person.Reading != nil {
 		printReadingText(*person.Reading)
+	}
+}
+
+// Info command handler
+
+func handleInfo(gate int, center, channel, hdType, list string) {
+	// List all items of a category
+	if list != "" {
+		switch strings.ToLower(list) {
+		case "gates":
+			listAllGates()
+		case "centers":
+			listAllCenters()
+		case "channels":
+			listAllChannels()
+		case "types":
+			listAllTypes()
+		case "authorities":
+			listAllAuthorities()
+		case "profiles":
+			listAllProfiles()
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown list category: %s\n", list)
+			fmt.Println("Available categories: gates, centers, channels, types, authorities, profiles")
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Look up specific gate
+	if gate > 0 {
+		lookupGate(gate)
+		return
+	}
+
+	// Look up center
+	if center != "" {
+		lookupCenter(center)
+		return
+	}
+
+	// Look up channel
+	if channel != "" {
+		lookupChannel(channel)
+		return
+	}
+
+	// Look up type
+	if hdType != "" {
+		lookupType(hdType)
+		return
+	}
+
+	// No flags provided
+	fmt.Println("Please specify what to look up:")
+	fmt.Println("  -gate <number>      Look up a specific gate (1-64)")
+	fmt.Println("  -center <name>      Look up a specific center")
+	fmt.Println("  -channel <gates>    Look up a channel (e.g., '1-8')")
+	fmt.Println("  -type <name>        Look up a Human Design type")
+	fmt.Println("  -list <category>    List all of: gates, centers, channels, types, authorities, profiles")
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  humandesign-cli info -gate 14")
+	fmt.Println("  humandesign-cli info -center Sacral")
+	fmt.Println("  humandesign-cli info -channel 1-8")
+	fmt.Println("  humandesign-cli info -list channels")
+}
+
+func lookupGate(gateNum int) {
+	if gateNum < 1 || gateNum > 64 {
+		fmt.Fprintf(os.Stderr, "Invalid gate number: %d (must be 1-64)\n", gateNum)
+		os.Exit(1)
+	}
+
+	gate, ok := calculator.AllGates[gateNum]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Gate %d not found\n", gateNum)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Gate %d - %s\n", gate.Number, gate.Name)
+	fmt.Printf("Center: %s\n", gate.Center)
+	fmt.Println()
+
+	// Find channels this gate belongs to
+	fmt.Println("Channels:")
+	foundChannels := false
+	for _, ch := range calculator.AllChannels {
+		if ch.Gate1 == gateNum || ch.Gate2 == gateNum {
+			partnerGate := ch.Gate2
+			if ch.Gate2 == gateNum {
+				partnerGate = ch.Gate1
+			}
+			fmt.Printf("  %d-%d: %s (%s ↔ %s)\n", ch.Gate1, ch.Gate2, ch.Name, ch.Center1, ch.Center2)
+			fmt.Printf("       Requires Gate %d to activate\n", partnerGate)
+			foundChannels = true
+		}
+	}
+	if !foundChannels {
+		fmt.Println("  (No channels defined for this gate)")
+	}
+}
+
+func lookupCenter(centerName string) {
+	// Find matching center (case-insensitive)
+	var found string
+	for _, name := range calculator.CenterNames {
+		if strings.EqualFold(name, centerName) {
+			found = name
+			break
+		}
+	}
+
+	if found == "" {
+		fmt.Fprintf(os.Stderr, "Center '%s' not found\n", centerName)
+		fmt.Println("\nAvailable centers:")
+		for _, name := range calculator.CenterNames {
+			fmt.Printf("  - %s\n", name)
+		}
+		os.Exit(1)
+	}
+
+	fmt.Printf("Center: %s\n", found)
+	fmt.Println()
+
+	// List gates in this center
+	fmt.Println("Gates:")
+	count := 0
+	for gateNum, gate := range calculator.AllGates {
+		if gate.Center == found {
+			fmt.Printf("  Gate %d - %s\n", gateNum, gate.Name)
+			count++
+		}
+	}
+	fmt.Printf("\nTotal: %d gates\n", count)
+	fmt.Println()
+
+	// List channels connected to this center
+	fmt.Println("Channels:")
+	for _, ch := range calculator.AllChannels {
+		if ch.Center1 == found || ch.Center2 == found {
+			fmt.Printf("  %d-%d: %s\n", ch.Gate1, ch.Gate2, ch.Name)
+		}
+	}
+}
+
+func lookupChannel(channelStr string) {
+	parts := strings.Split(channelStr, "-")
+	if len(parts) != 2 {
+		fmt.Fprintf(os.Stderr, "Invalid channel format: %s\nUse format like '1-8' or '64-47'\n", channelStr)
+		os.Exit(1)
+	}
+
+	gate1, err1 := fmt.Sscanf(parts[0], "%d")
+	gate2, err2 := fmt.Sscanf(parts[1], "%d")
+	if err1 != nil || err2 != nil {
+		fmt.Fprintf(os.Stderr, "Invalid gate numbers in channel: %s\n", channelStr)
+		os.Exit(1)
+	}
+
+	var g1, g2 int
+	fmt.Sscanf(parts[0], "%d", &g1)
+	fmt.Sscanf(parts[1], "%d", &g2)
+
+	// Find the channel
+	ch := calculator.GetChannelForGates(g1, g2)
+	if ch == nil {
+		fmt.Printf("Gates %d and %d do not form a channel\n", g1, g2)
+		fmt.Println("\nPossible channels for these gates:")
+		
+		for _, channel := range calculator.AllChannels {
+			if channel.Gate1 == g1 || channel.Gate2 == g1 {
+				fmt.Printf("  Gate %d: %d-%d %s\n", g1, channel.Gate1, channel.Gate2, channel.Name)
+			}
+		}
+		for _, channel := range calculator.AllChannels {
+			if channel.Gate1 == g2 || channel.Gate2 == g2 {
+				fmt.Printf("  Gate %d: %d-%d %s\n", g2, channel.Gate1, channel.Gate2, channel.Name)
+			}
+		}
+		return
+	}
+
+	fmt.Printf("Channel: %s\n", ch.Name)
+	fmt.Printf("Gates: %d ↔ %d\n", ch.Gate1, ch.Gate2)
+	fmt.Printf("Centers: %s ↔ %s\n", ch.Center1, ch.Center2)
+	fmt.Println()
+
+	// Show gate details
+	if g1info, ok := calculator.AllGates[ch.Gate1]; ok {
+		fmt.Printf("Gate %d - %s (%s)\n", ch.Gate1, g1info.Name, g1info.Center)
+	}
+	if g2info, ok := calculator.AllGates[ch.Gate2]; ok {
+		fmt.Printf("Gate %d - %s (%s)\n", ch.Gate2, g2info.Name, g2info.Center)
+	}
+}
+
+func lookupType(typeName string) {
+	types := map[string]struct {
+		strategy    string
+		signature   string
+		notSelf     string
+		description string
+	}{
+		"generator": {
+			"Wait to Respond",
+			"Satisfaction",
+			"Frustration",
+			"Life force energy, designed to respond to life. Sacral center defined.",
+		},
+		"manifesting generator": {
+			"Wait to Respond, then Inform",
+			"Satisfaction",
+			"Frustration",
+			"Multi-passionate, designed to respond and then inform. Sacral defined with motor to throat.",
+		},
+		"projector": {
+			"Wait for the Invitation",
+			"Success",
+			"Bitterness",
+			"Guides and manages, designed to wait for invitations. No Sacral, no motor to throat.",
+		},
+		"manifestor": {
+			"Inform Before Acting",
+			"Peace",
+			"Anger",
+			"Initiators, designed to inform before acting. Motor to throat, no Sacral.",
+		},
+		"reflector": {
+			"Wait a Lunar Cycle",
+			"Surprise",
+			"Disappointment",
+			"Mirrors of society, designed to wait. No centers defined.",
+		},
+	}
+
+	info, ok := types[strings.ToLower(typeName)]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Type '%s' not found\n", typeName)
+		fmt.Println("\nAvailable types:")
+		for name := range types {
+			fmt.Printf("  - %s\n", name)
+		}
+		os.Exit(1)
+	}
+
+	fmt.Printf("Type: %s\n", strings.Title(typeName))
+	fmt.Printf("Strategy: %s\n", info.strategy)
+	fmt.Printf("Signature: %s\n", info.signature)
+	fmt.Printf("Not-Self Theme: %s\n", info.notSelf)
+	fmt.Printf("\n%s\n", info.description)
+}
+
+func listAllGates() {
+	fmt.Println("All 64 Gates:\n")
+	for center, centerName := range map[string]string{
+		"Head":        "Head Center",
+		"Ajna":        "Ajna Center",
+		"Throat":      "Throat Center",
+		"G":           "G Center",
+		"Heart":       "Heart/Ego Center",
+		"Sacral":      "Sacral Center",
+		"SolarPlexus": "Solar Plexus Center",
+		"Spleen":      "Spleen Center",
+		"Root":        "Root Center",
+	} {
+		fmt.Printf("%s:\n", centerName)
+		for gateNum, gate := range calculator.AllGates {
+			if gate.Center == center {
+				fmt.Printf("  Gate %2d - %s\n", gateNum, gate.Name)
+			}
+		}
+		fmt.Println()
+	}
+}
+
+func listAllCenters() {
+	fmt.Println("The 9 Centers:\n")
+	centerDescriptions := map[string]string{
+		"Head":        "Inspiration and mental pressure",
+		"Ajna":        "Conceptualization and mental processing",
+		"Throat":      "Communication and manifestation",
+		"G":           "Identity, love, and direction",
+		"Heart":       "Willpower and ego (motor center)",
+		"Sacral":      "Life force and work energy (motor center)",
+		"SolarPlexus": "Emotions and feelings (motor center)",
+		"Spleen":      "Intuition, health, and survival",
+		"Root":        "Adrenaline and drive (motor center)",
+	}
+
+	for _, name := range calculator.CenterNames {
+		desc := centerDescriptions[name]
+		fmt.Printf("%-15s - %s\n", name, desc)
+	}
+}
+
+func listAllChannels() {
+	fmt.Printf("All %d Channels:\n\n", len(calculator.AllChannels))
+	for i, ch := range calculator.AllChannels {
+		fmt.Printf("%2d. %s (%d-%d)\n", i+1, ch.Name, ch.Gate1, ch.Gate2)
+		fmt.Printf("    %s ↔ %s\n", ch.Center1, ch.Center2)
+	}
+}
+
+func listAllTypes() {
+	fmt.Println("The 5 Human Design Types:\n")
+	types := []struct {
+		name     string
+		percent  string
+		strategy string
+	}{
+		{"Generator", "~37%", "Wait to Respond"},
+		{"Manifesting Generator", "~33%", "Wait to Respond, then Inform"},
+		{"Projector", "~20%", "Wait for the Invitation"},
+		{"Manifestor", "~9%", "Inform Before Acting"},
+		{"Reflector", "~1%", "Wait a Lunar Cycle"},
+	}
+
+	for _, t := range types {
+		fmt.Printf("%-25s %6s - %s\n", t.name, t.percent, t.strategy)
+	}
+}
+
+func listAllAuthorities() {
+	fmt.Println("The 7 Authorities (in order of precedence):\n")
+	authorities := []struct {
+		name        string
+		description string
+	}{
+		{"Emotional (Solar Plexus)", "Wait for emotional clarity over time"},
+		{"Sacral", "Gut response in the moment"},
+		{"Splenic", "Intuitive knowing in the now"},
+		{"Ego/Heart", "Willpower and self-worth"},
+		{"Self-Projected", "Speaking truth through the G Center"},
+		{"Environmental (Mental)", "Talk it out, feel the environment"},
+		{"Lunar (Reflector)", "Wait a full lunar cycle"},
+	}
+
+	for i, auth := range authorities {
+		fmt.Printf("%d. %-30s - %s\n", i+1, auth.name, auth.description)
+	}
+}
+
+func listAllProfiles() {
+	fmt.Println("The 12 Profiles:\n")
+	for profile, name := range calculator.ProfileNames {
+		fmt.Printf("%s - %s\n", profile, name)
 	}
 }
