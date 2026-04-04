@@ -8,6 +8,7 @@ import (
 	"humandesign/internal/astrology"
 	"humandesign/internal/bodygraph"
 	"humandesign/internal/calculator"
+	"humandesign/internal/cities"
 	"humandesign/internal/database"
 	"log"
 	"net/http"
@@ -130,6 +131,18 @@ tr:hover { background: #f8f0ff; }
 .strength-strong { color: #e67e22; font-weight: 600; }
 .strength-moderate { color: #2980b9; }
 .strength-weak { color: #95a5a6; }
+.dropdown-wrap { position: relative; }
+.dropdown-list {
+    display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 250px;
+    overflow-y: auto; background: white; border: 2px solid #764ba2; border-top: none;
+    border-radius: 0 0 10px 10px; z-index: 50; box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+.dropdown-list.open { display: block; }
+.dropdown-item {
+    padding: 10px 14px; cursor: pointer; font-size: 0.95rem; border-bottom: 1px solid #f0f0f0;
+}
+.dropdown-item:hover, .dropdown-item.highlighted { background: #f0e6ff; }
+.dropdown-item .country { color: #999; font-size: 0.8rem; margin-left: 6px; }
 .error { background: #fee; color: #c00; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: none; }
 .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #764ba2; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 10px auto; }
 @keyframes spin { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
@@ -174,41 +187,116 @@ const pageFoot = `</body></html>`
 // birthFormJS returns JS for the birth-data form used on multiple pages
 func birthFormJS(endpoint string) string {
 	return fmt.Sprintf(`
-document.getElementById('birthForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const form = e.target;
-    const loading = document.getElementById('loading');
-    const error = document.getElementById('error');
-    error.style.display = 'none';
-    form.style.display = 'none';
-    loading.style.display = 'block';
-    const birthdate = document.getElementById('birthdate').value;
-    const birthtime = document.getElementById('birthtime').value;
-    const datetime = birthdate + 'T' + birthtime + ':00Z';
-    const data = {
-        datetime: datetime,
-        latitude: parseFloat(document.getElementById('latitude').value),
-        longitude: parseFloat(document.getElementById('longitude').value),
-        location: document.getElementById('location').value
-    };
-    try {
-        const response = await fetch('%s', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
+(function() {
+    let citiesData = [];
+    let highlightIdx = -1;
+
+    fetch('/api/cities').then(r => r.json()).then(data => { citiesData = data; });
+
+    const searchInput = document.getElementById('locationSearch');
+    const dropdown = document.getElementById('dropdownList');
+    const latInput = document.getElementById('latitude');
+    const lonInput = document.getElementById('longitude');
+    const locInput = document.getElementById('location');
+
+    function renderDropdown(matches) {
+        dropdown.innerHTML = '';
+        highlightIdx = -1;
+        if (matches.length === 0) { dropdown.classList.remove('open'); return; }
+        matches.forEach(function(city, i) {
+            const div = document.createElement('div');
+            div.className = 'dropdown-item';
+            div.innerHTML = city.name + '<span class="country">' + city.country + '</span>';
+            div.addEventListener('mousedown', function(e) { e.preventDefault(); selectCity(city); });
+            dropdown.appendChild(div);
         });
-        if (!response.ok) throw new Error(await response.text());
-        const html = await response.text();
-        document.open();
-        document.write(html);
-        document.close();
-    } catch (err) {
-        loading.style.display = 'none';
-        form.style.display = 'block';
-        error.textContent = 'Error: ' + err.message;
-        error.style.display = 'block';
+        dropdown.classList.add('open');
     }
-});`, endpoint)
+
+    function selectCity(city) {
+        searchInput.value = city.name + ', ' + city.country;
+        latInput.value = city.latitude;
+        lonInput.value = city.longitude;
+        locInput.value = city.name + ', ' + city.country;
+        dropdown.classList.remove('open');
+    }
+
+    searchInput.addEventListener('input', function() {
+        const q = this.value.toLowerCase().trim();
+        if (q.length < 1) { dropdown.classList.remove('open'); return; }
+        const matches = citiesData.filter(function(c) {
+            return c.name.toLowerCase().indexOf(q) !== -1 || c.country.toLowerCase().indexOf(q) !== -1;
+        }).slice(0, 20);
+        renderDropdown(matches);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+        const items = dropdown.querySelectorAll('.dropdown-item');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            highlightIdx = Math.min(highlightIdx + 1, items.length - 1);
+            items.forEach(function(el, i) { el.classList.toggle('highlighted', i === highlightIdx); });
+            if (items[highlightIdx]) items[highlightIdx].scrollIntoView({block:'nearest'});
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            highlightIdx = Math.max(highlightIdx - 1, 0);
+            items.forEach(function(el, i) { el.classList.toggle('highlighted', i === highlightIdx); });
+            if (items[highlightIdx]) items[highlightIdx].scrollIntoView({block:'nearest'});
+        } else if (e.key === 'Enter' && highlightIdx >= 0 && dropdown.classList.contains('open')) {
+            e.preventDefault();
+            const q = searchInput.value.toLowerCase().trim();
+            const matches = citiesData.filter(function(c) {
+                return c.name.toLowerCase().indexOf(q) !== -1 || c.country.toLowerCase().indexOf(q) !== -1;
+            }).slice(0, 20);
+            if (matches[highlightIdx]) selectCity(matches[highlightIdx]);
+        }
+    });
+
+    searchInput.addEventListener('blur', function() { setTimeout(function(){ dropdown.classList.remove('open'); }, 200); });
+    searchInput.addEventListener('focus', function() { if (this.value.length >= 1) this.dispatchEvent(new Event('input')); });
+
+    document.getElementById('birthForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        if (!latInput.value || !lonInput.value) {
+            const error = document.getElementById('error');
+            error.textContent = 'Please select a city from the dropdown.';
+            error.style.display = 'block';
+            return;
+        }
+        const form = e.target;
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        error.style.display = 'none';
+        form.style.display = 'none';
+        loading.style.display = 'block';
+        const birthdate = document.getElementById('birthdate').value;
+        const birthtime = document.getElementById('birthtime').value;
+        const datetime = birthdate + 'T' + birthtime + ':00Z';
+        const data = {
+            datetime: datetime,
+            latitude: parseFloat(latInput.value),
+            longitude: parseFloat(lonInput.value),
+            location: locInput.value
+        };
+        try {
+            const response = await fetch('%s', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) throw new Error(await response.text());
+            const html = await response.text();
+            document.open();
+            document.write(html);
+            document.close();
+        } catch (err) {
+            loading.style.display = 'none';
+            form.style.display = 'block';
+            error.textContent = 'Error: ' + err.message;
+            error.style.display = 'block';
+        }
+    });
+})();`, endpoint)
 }
 
 func birthFormHTML() string {
@@ -226,23 +314,19 @@ func birthFormHTML() string {
         </div>
     </div>
     <div class="form-group">
-        <label for="location">Birth Location</label>
-        <input type="text" id="location" name="location" placeholder="e.g., New York, NY" required>
-    </div>
-    <div class="row">
-        <div class="form-group">
-            <label for="latitude">Latitude</label>
-            <input type="number" id="latitude" name="latitude" step="0.0001" placeholder="40.7128" required>
+        <label for="locationSearch">Birth Location</label>
+        <div class="dropdown-wrap">
+            <input type="text" id="locationSearch" autocomplete="off" placeholder="Type to search cities..." required>
+            <div class="dropdown-list" id="dropdownList"></div>
         </div>
-        <div class="form-group">
-            <label for="longitude">Longitude</label>
-            <input type="number" id="longitude" name="longitude" step="0.0001" placeholder="-74.0060" required>
-        </div>
+        <input type="hidden" id="latitude" name="latitude">
+        <input type="hidden" id="longitude" name="longitude">
+        <input type="hidden" id="location" name="location">
     </div>
     <button type="submit">Calculate</button>
 </form>
 <div class="loading" id="loading"><div class="spinner"></div><p>Calculating...</p></div>
-<div class="info-box"><strong>Tip:</strong> Use your exact birth time from your birth certificate. Look up coordinates for your birth city online.</div>`
+<div class="info-box"><strong>Tip:</strong> Use your exact birth time from your birth certificate. Select the city closest to your birth location.</div>`
 }
 
 // ========================
@@ -346,27 +430,23 @@ func (h *Handler) PeoplePage(w http.ResponseWriter, r *http.Request) {
         </div>
         <div class="row">
             <div class="form-group">
-                <label for="birthdate">Birth Date</label>
-                <input type="date" id="birthdate" name="birthdate" required>
+                <label for="p_birthdate">Birth Date</label>
+                <input type="date" id="p_birthdate" name="birthdate" required>
             </div>
             <div class="form-group">
-                <label for="birthtime">Birth Time</label>
-                <input type="time" id="birthtime" name="birthtime" required>
+                <label for="p_birthtime">Birth Time</label>
+                <input type="time" id="p_birthtime" name="birthtime" required>
             </div>
         </div>
         <div class="form-group">
-            <label for="location">Birth Location</label>
-            <input type="text" id="location" name="location" placeholder="e.g., New York, NY" required>
-        </div>
-        <div class="row">
-            <div class="form-group">
-                <label for="latitude">Latitude</label>
-                <input type="number" id="latitude" name="latitude" step="0.0001" placeholder="40.7128" required>
+            <label for="p_locationSearch">Birth Location</label>
+            <div class="dropdown-wrap">
+                <input type="text" id="p_locationSearch" autocomplete="off" placeholder="Type to search cities..." required>
+                <div class="dropdown-list" id="p_dropdownList"></div>
             </div>
-            <div class="form-group">
-                <label for="longitude">Longitude</label>
-                <input type="number" id="longitude" name="longitude" step="0.0001" placeholder="-74.0060" required>
-            </div>
+            <input type="hidden" id="p_latitude" name="latitude">
+            <input type="hidden" id="p_longitude" name="longitude">
+            <input type="hidden" id="p_location" name="location">
         </div>
         <div class="form-group">
             <label for="notes">Notes (optional)</label>
@@ -378,33 +458,97 @@ func (h *Handler) PeoplePage(w http.ResponseWriter, r *http.Request) {
 </div>
 </div>
 <script>
-document.getElementById('addPersonForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const msg = document.getElementById('addMsg');
-    const data = {
-        name: document.getElementById('name').value,
-        birth_date: document.getElementById('birthdate').value,
-        birth_time: document.getElementById('birthtime').value,
-        location: document.getElementById('location').value,
-        latitude: parseFloat(document.getElementById('latitude').value),
-        longitude: parseFloat(document.getElementById('longitude').value),
-        notes: document.getElementById('notes').value
-    };
-    try {
-        const resp = await fetch('/api/people', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
-        if (!resp.ok) throw new Error(await resp.text());
-        msg.textContent = 'Person added successfully!';
-        msg.style.background = '#d5f5e3'; msg.style.color = '#27ae60'; msg.style.display = 'block';
-        setTimeout(() => location.reload(), 800);
-    } catch(err) {
-        msg.textContent = 'Error: ' + err.message;
-        msg.style.background = '#fadbd8'; msg.style.color = '#c0392b'; msg.style.display = 'block';
+(function() {
+    let citiesData = [];
+    let highlightIdx = -1;
+    fetch('/api/cities').then(r => r.json()).then(data => { citiesData = data; });
+
+    const searchInput = document.getElementById('p_locationSearch');
+    const dropdown = document.getElementById('p_dropdownList');
+    const latInput = document.getElementById('p_latitude');
+    const lonInput = document.getElementById('p_longitude');
+    const locInput = document.getElementById('p_location');
+
+    function renderDropdown(matches) {
+        dropdown.innerHTML = '';
+        highlightIdx = -1;
+        if (matches.length === 0) { dropdown.classList.remove('open'); return; }
+        matches.forEach(function(city) {
+            const div = document.createElement('div');
+            div.className = 'dropdown-item';
+            div.innerHTML = city.name + '<span class="country">' + city.country + '</span>';
+            div.addEventListener('mousedown', function(e) { e.preventDefault(); selectCity(city); });
+            dropdown.appendChild(div);
+        });
+        dropdown.classList.add('open');
     }
-});
+
+    function selectCity(city) {
+        searchInput.value = city.name + ', ' + city.country;
+        latInput.value = city.latitude;
+        lonInput.value = city.longitude;
+        locInput.value = city.name + ', ' + city.country;
+        dropdown.classList.remove('open');
+    }
+
+    searchInput.addEventListener('input', function() {
+        const q = this.value.toLowerCase().trim();
+        if (q.length < 1) { dropdown.classList.remove('open'); return; }
+        const matches = citiesData.filter(function(c) {
+            return c.name.toLowerCase().indexOf(q) !== -1 || c.country.toLowerCase().indexOf(q) !== -1;
+        }).slice(0, 20);
+        renderDropdown(matches);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+        const items = dropdown.querySelectorAll('.dropdown-item');
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx+1, items.length-1); items.forEach(function(el,i){el.classList.toggle('highlighted',i===highlightIdx);}); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx-1, 0); items.forEach(function(el,i){el.classList.toggle('highlighted',i===highlightIdx);}); }
+        else if (e.key === 'Enter' && highlightIdx >= 0 && dropdown.classList.contains('open')) {
+            e.preventDefault();
+            const q = searchInput.value.toLowerCase().trim();
+            const matches = citiesData.filter(function(c) { return c.name.toLowerCase().indexOf(q)!==-1||c.country.toLowerCase().indexOf(q)!==-1; }).slice(0,20);
+            if (matches[highlightIdx]) selectCity(matches[highlightIdx]);
+        }
+    });
+
+    searchInput.addEventListener('blur', function() { setTimeout(function(){ dropdown.classList.remove('open'); }, 200); });
+    searchInput.addEventListener('focus', function() { if (this.value.length >= 1) this.dispatchEvent(new Event('input')); });
+
+    document.getElementById('addPersonForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        if (!latInput.value || !lonInput.value) {
+            const msg = document.getElementById('addMsg');
+            msg.textContent = 'Please select a city from the dropdown.';
+            msg.style.background = '#fadbd8'; msg.style.color = '#c0392b'; msg.style.display = 'block';
+            return;
+        }
+        const msg = document.getElementById('addMsg');
+        const data = {
+            name: document.getElementById('name').value,
+            birth_date: document.getElementById('p_birthdate').value,
+            birth_time: document.getElementById('p_birthtime').value,
+            location: locInput.value,
+            latitude: parseFloat(latInput.value),
+            longitude: parseFloat(lonInput.value),
+            notes: document.getElementById('notes').value
+        };
+        try {
+            const resp = await fetch('/api/people', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+            if (!resp.ok) throw new Error(await resp.text());
+            msg.textContent = 'Person added successfully!';
+            msg.style.background = '#d5f5e3'; msg.style.color = '#27ae60'; msg.style.display = 'block';
+            setTimeout(() => window.location.reload(), 800);
+        } catch(err) {
+            msg.textContent = 'Error: ' + err.message;
+            msg.style.background = '#fadbd8'; msg.style.color = '#c0392b'; msg.style.display = 'block';
+        }
+    });
+})();
 async function deletePerson(id) {
     if (!confirm('Delete this person?')) return;
     await fetch('/api/people/' + id, { method: 'DELETE' });
-    location.reload();
+    window.location.reload();
 }
 </script>` + pageFoot
 
@@ -842,6 +986,15 @@ func (h *Handler) HandlePersonChart(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Unknown chart type: "+chartType, http.StatusBadRequest)
 	}
+}
+
+// ========================
+// API: Cities
+// ========================
+
+func (h *Handler) CitiesAPI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(cities.All)
 }
 
 // ========================

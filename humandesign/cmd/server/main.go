@@ -43,6 +43,7 @@ func main() {
 	http.HandleFunc("/api/astrocartography", h.GenerateAstrocartography)
 	http.HandleFunc("/api/people", h.HandlePeople)
 	http.HandleFunc("/api/people/", h.HandlePerson)
+	http.HandleFunc("/api/cities", h.CitiesAPI)
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("Cosmic Blueprint starting on http://localhost%s", addr)
