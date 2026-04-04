@@ -296,20 +296,47 @@ func (g *Generator) GenerateHTML(reading *calculator.Reading) (string, error) {
         .gates-section {
             margin-top: 20px;
         }
-        .gate-list {
+        .planet-list {
+            margin-top: 15px;
+        }
+        .planet-item {
             display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 10px;
+            align-items: center;
+            padding: 12px 15px;
+            margin: 8px 0;
+            border-radius: 8px;
+            transition: transform 0.2s;
         }
-        .gate-tag {
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-size: 0.85rem;
-            font-weight: 500;
+        .planet-item:hover {
+            transform: translateX(5px);
         }
-        .gate-personality { background: #333; color: white; }
-        .gate-design { background: #8B0000; color: white; }
+        .personality-planet {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            border-left: 4px solid #333;
+        }
+        .design-planet {
+            background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+            color: white;
+            border-left: 4px solid #8B0000;
+        }
+        .planet-symbol {
+            font-weight: bold;
+            font-size: 1rem;
+            min-width: 100px;
+            margin-right: 15px;
+        }
+        .gate-number {
+            font-weight: 600;
+            font-size: 0.95rem;
+            min-width: 80px;
+            margin-right: 15px;
+        }
+        .gate-name {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            flex: 1;
+        }
         .channels-section { margin-top: 20px; }
         .channel-item {
             background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
@@ -359,18 +386,26 @@ func (g *Generator) GenerateHTML(reading *calculator.Reading) (string, error) {
                 
                 <div class="gates-section">
                     <div class="detail-card">
-                        <h3>Personality Gates (Conscious - Black)</h3>
-                        <div class="gate-list">
+                        <h3>Personality Planets (Conscious - Black)</h3>
+                        <div class="planet-list">
                             {{range .PersonalityGates}}
-                            <span class="gate-tag gate-personality">{{.Number}}.{{.Line}}</span>
+                            <div class="planet-item personality-planet">
+                                <span class="planet-symbol">{{.Planet}}</span>
+                                <span class="gate-number">Gate {{.Number}}.{{.Line}}</span>
+                                <span class="gate-name">{{.Name}}</span>
+                            </div>
                             {{end}}
                         </div>
                     </div>
                     <div class="detail-card">
-                        <h3>Design Gates (Unconscious - Red)</h3>
-                        <div class="gate-list">
+                        <h3>Design Planets (Unconscious - Red)</h3>
+                        <div class="planet-list">
                             {{range .DesignGates}}
-                            <span class="gate-tag gate-design">{{.Number}}.{{.Line}}</span>
+                            <div class="planet-item design-planet">
+                                <span class="planet-symbol">{{.Planet}}</span>
+                                <span class="gate-number">Gate {{.Number}}.{{.Line}}</span>
+                                <span class="gate-name">{{.Name}}</span>
+                            </div>
                             {{end}}
                         </div>
                     </div>
