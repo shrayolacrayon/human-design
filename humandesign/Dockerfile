@@ -24,8 +24,9 @@ RUN apt-get update && apt-get install -y libswe2.0 && rm -rf /var/lib/apt/lists/
 
 WORKDIR /app
 
-# Copy the binary from builder
+# Copy the binary and data from builder
 COPY --from=builder /app/humandesign .
+COPY --from=builder /app/data ./data
 
 # Expose port
 EXPOSE 8080

@@ -1,0 +1,13 @@
+[
+  {
+    "id": "p1",
+    "name": "Example Person",
+    "birth_date": "1990-06-15",
+    "birth_time": "14:30",
+    "location": "New York, NY",
+    "latitude": 40.7128,
+    "longitude": -74.006,
+    "notes": "Sample entry - replace with real data",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+]

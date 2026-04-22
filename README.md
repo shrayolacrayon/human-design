@@ -1,79 +1,120 @@
-# Human Design Calculator
+# Cosmic Blueprint
 
-A Go web application that generates Human Design readings with body graph visualizations based on birth data.
+A Go web application for Human Design, Western Astrology, and Astrocartography — all calculated from birth data.
 
 ## Features
 
-- **Birth Data Input**: Enter date, time, and location of birth
-- **Human Design Calculations**: Determines Type, Authority, Profile, Strategy, and more
-- **Body Graph Visualization**: SVG-based visualization of defined/undefined centers and channels
-- **REST API**: JSON endpoints for integration with other applications
+- **Human Design**: Type, Authority, Profile, Strategy, body graph visualization
+- **Astrology**: Natal chart with planetary placements, houses, aspects, elements
+- **Astrocartography**: Planetary line influence by location
+- **People Database**: Save birth data for multiple people and generate any chart in one click
+- **City Search**: Searchable dropdown of ~170 cities — no manual lat/long entry needed
+
+## Running the App
+
+### Option 1: Docker (recommended)
+
+Requires [Docker](https://www.docker.com/) or [Colima](https://github.com/abiosoft/colima) (macOS).
+
+```bash
+# macOS: start the Docker daemon first
+colima start
+
+# Build and run
+cd humandesign
+docker compose up --build
+```
+
+Then open **http://localhost:8080** in your browser.
+
+To stop: `Ctrl+C`, then `docker compose down`.
+
+### Option 2: Native (macOS)
+
+Requires Go 1.21+ and the Swiss Ephemeris C library.
+
+```bash
+cd humandesign
+
+# Install libswe (one-time setup)
+bash install-macos-deps.sh
+
+# Run
+go run ./cmd/server/
+```
+
+Then open **http://localhost:8080**.
+
+---
+
+## Pages
+
+| URL | Description |
+|-----|-------------|
+| `/` | Human Design chart |
+| `/astrology` | Western natal astrology chart |
+| `/astrocartography` | Planetary line map by location |
+| `/people` | Saved people database |
+
+## People Database
+
+Birth data is stored in `humandesign/data/people.json`. You can commit this file to keep a shared database across machines. Edit it directly or use the `/people` UI to add/remove entries.
 
 ## Project Structure
 
 ```
 humandesign/
-├── cmd/
-│   └── server/
-│       └── main.go          # Application entry point
+├── cmd/server/main.go           # Entry point
+├── data/people.json             # People database (committable)
 ├── internal/
-│   ├── calculator/
-│   │   ├── types.go         # Data structures and types
-│   │   ├── gates.go         # Gate and channel definitions
-│   │   └── calculator.go    # Main calculation logic
-│   ├── ephemeris/
-│   │   └── ephemeris.go     # Planetary position calculations
-│   ├── bodygraph/
-│   │   └── generator.go     # SVG body graph generation
-│   └── handlers/
-│       └── handlers.go      # HTTP request handlers
-├── go.mod
-└── README.md
-```
-
-## Quick Start
-
-```bash
-# Navigate to the project directory
-cd humandesign
-
-# Run the application
-go run cmd/server/main.go
-
-# The server starts at http://localhost:8080
+│   ├── astrology/               # Natal chart calculations
+│   ├── astrocartography/        # Planetary line calculations
+│   ├── bodygraph/               # SVG body graph generator
+│   ├── calculator/              # Human Design engine
+│   ├── cities/                  # City coordinates for dropdown
+│   ├── database/                # JSON file storage
+│   ├── ephemeris/               # Swiss Ephemeris C bindings
+│   └── handlers/                # HTTP handlers and HTML views
+├── docker-compose.yml
+├── Dockerfile
+└── install-macos-deps.sh        # macOS libswe installer
 ```
 
 ## API Endpoints
 
-### GET /
-The main web interface with a form to enter birth data.
-
 ### POST /api/reading
-Generate a Human Design reading (returns HTML).
+Human Design reading (returns HTML).
 
-**Request Body:**
+### POST /api/reading/json
+Human Design reading (returns JSON).
+
+### POST /api/astrology
+Natal astrology chart (returns HTML).
+
+### POST /api/astrocartography
+Astrocartography report (returns HTML).
+
+### GET /api/people
+List all saved people (JSON).
+
+### POST /api/people
+Add a person (JSON body).
+
+### DELETE /api/people/{id}
+Delete a person.
+
+### GET /api/cities
+List all available cities with coordinates (JSON).
+
+**Chart request body:**
 ```json
 {
   "datetime": "1990-06-15T14:30:00Z",
   "latitude": 40.7128,
   "longitude": -74.0060,
-  "location": "New York, NY"
+  "location": "New York, US"
 }
 ```
-
-### POST /api/reading/json
-Generate a Human Design reading (returns JSON).
-
-**Response includes:**
-- Type (Generator, Manifestor, Projector, Reflector, Manifesting Generator)
-- Authority (Emotional, Sacral, Splenic, Ego, Self, Environmental, Lunar)
-- Profile (1-6 combinations)
-- Strategy
-- Signature and Not-Self Theme
-- Centers (defined/undefined)
-- Channels (defined)
-- Gates (Personality and Design)
-- Incarnation Cross
 
 ## Understanding Human Design
 
