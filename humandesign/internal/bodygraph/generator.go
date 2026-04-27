@@ -296,20 +296,23 @@ func (g *Generator) GenerateHTML(reading *calculator.Reading) (string, error) {
         .gates-section {
             margin-top: 20px;
         }
-        .gate-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 10px;
+        .gate-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .gate-table td { padding: 6px 8px; font-size: 0.88rem; border-bottom: 1px solid #f0f0f0; }
+        .gate-table tr:last-child td { border-bottom: none; }
+        .planet-cell { white-space: nowrap; font-weight: 600; }
+        .planet-sym { font-size: 1rem; margin-right: 4px; }
+        .gate-num-personality {
+            background: #333; color: white;
+            padding: 2px 8px; border-radius: 10px; font-size: 0.82rem;
+            white-space: nowrap;
         }
-        .gate-tag {
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-size: 0.85rem;
-            font-weight: 500;
+        .gate-num-design {
+            background: #8B0000; color: white;
+            padding: 2px 8px; border-radius: 10px; font-size: 0.82rem;
+            white-space: nowrap;
         }
-        .gate-personality { background: #333; color: white; }
-        .gate-design { background: #8B0000; color: white; }
+        .gate-name-cell { color: #555; font-style: italic; }
+        .lon-cell { color: #aaa; font-size: 0.78rem; text-align: right; }
         .channels-section { margin-top: 20px; }
         .channel-item {
             background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
@@ -359,20 +362,30 @@ func (g *Generator) GenerateHTML(reading *calculator.Reading) (string, error) {
                 
                 <div class="gates-section">
                     <div class="detail-card">
-                        <h3>Personality Gates (Conscious - Black)</h3>
-                        <div class="gate-list">
+                        <h3>Personality Gates (Conscious &#9679; Black)</h3>
+                        <table class="gate-table">
                             {{range .PersonalityGates}}
-                            <span class="gate-tag gate-personality">{{.Number}}.{{.Line}}</span>
+                            <tr>
+                                <td class="planet-cell"><span class="planet-sym">{{planetSymbol .Planet}}</span>{{.Planet}}</td>
+                                <td><span class="gate-num-personality">{{.Number}}.{{.Line}}</span></td>
+                                <td class="gate-name-cell">{{.Name}}</td>
+                                <td class="lon-cell">{{printf "%.2f" .Longitude}}°</td>
+                            </tr>
                             {{end}}
-                        </div>
+                        </table>
                     </div>
                     <div class="detail-card">
-                        <h3>Design Gates (Unconscious - Red)</h3>
-                        <div class="gate-list">
+                        <h3>Design Gates (Unconscious &#9679; Red)</h3>
+                        <table class="gate-table">
                             {{range .DesignGates}}
-                            <span class="gate-tag gate-design">{{.Number}}.{{.Line}}</span>
+                            <tr>
+                                <td class="planet-cell"><span class="planet-sym">{{planetSymbol .Planet}}</span>{{.Planet}}</td>
+                                <td><span class="gate-num-design">{{.Number}}.{{.Line}}</span></td>
+                                <td class="gate-name-cell">{{.Name}}</td>
+                                <td class="lon-cell">{{printf "%.2f" .Longitude}}°</td>
+                            </tr>
                             {{end}}
-                        </div>
+                        </table>
                     </div>
                 </div>
 
@@ -407,7 +420,22 @@ func (g *Generator) GenerateHTML(reading *calculator.Reading) (string, error) {
 		"SVG":              template.HTML(svg),
 	}
 
-	t, err := template.New("reading").Parse(tmpl)
+	funcMap := template.FuncMap{
+		"planetSymbol": func(planet string) string {
+			symbols := map[string]string{
+				"Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀",
+				"Mars": "♂", "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅",
+				"Neptune": "♆", "Pluto": "♇", "North Node": "☊",
+				"South Node": "☋", "Earth": "⊕",
+			}
+			if s, ok := symbols[planet]; ok {
+				return s
+			}
+			return "★"
+		},
+		"printf": fmt.Sprintf,
+	}
+	t, err := template.New("reading").Funcs(funcMap).Parse(tmpl)
 	if err != nil {
 		return "", err
 	}

@@ -198,6 +198,27 @@ func birthFormJS(endpoint string) string {
     const latInput = document.getElementById('latitude');
     const lonInput = document.getElementById('longitude');
     const locInput = document.getElementById('location');
+    const tzInput  = document.getElementById('timezone');
+
+    // Convert a local date+time in an IANA timezone to a UTC ISO string.
+    function localToUTC(dateStr, timeStr, timezone) {
+        const target = dateStr + 'T' + timeStr + ':00';
+        let guess = new Date(target + 'Z'); // initial guess: treat as UTC
+        for (let i = 0; i < 5; i++) {
+            // Format guess in the target timezone using en-CA (gives YYYY-MM-DD, HH:MM)
+            const inTZ = guess.toLocaleString('en-CA', {
+                timeZone: timezone,
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', hour12: false
+            }).replace(',', '');
+            const parts = inTZ.trim().split(' ');
+            const tzLocal = parts[0] + 'T' + parts[1] + ':00Z';
+            const diff = new Date(target + 'Z') - new Date(tzLocal);
+            guess = new Date(guess.getTime() + diff);
+            if (Math.abs(diff) < 60000) break;
+        }
+        return guess.toISOString();
+    }
 
     function renderDropdown(matches) {
         dropdown.innerHTML = '';
@@ -218,6 +239,7 @@ func birthFormJS(endpoint string) string {
         latInput.value = city.latitude;
         lonInput.value = city.longitude;
         locInput.value = city.name + ', ' + city.country;
+        tzInput.value  = city.timezone || '';
         dropdown.classList.remove('open');
     }
 
@@ -271,7 +293,8 @@ func birthFormJS(endpoint string) string {
         loading.style.display = 'block';
         const birthdate = document.getElementById('birthdate').value;
         const birthtime = document.getElementById('birthtime').value;
-        const datetime = birthdate + 'T' + birthtime + ':00Z';
+        const tz = tzInput.value;
+        const datetime = tz ? localToUTC(birthdate, birthtime, tz) : birthdate + 'T' + birthtime + ':00Z';
         const data = {
             datetime: datetime,
             latitude: parseFloat(latInput.value),
@@ -322,6 +345,7 @@ func birthFormHTML() string {
         <input type="hidden" id="latitude" name="latitude">
         <input type="hidden" id="longitude" name="longitude">
         <input type="hidden" id="location" name="location">
+        <input type="hidden" id="timezone" name="timezone">
     </div>
     <button type="submit">Calculate</button>
 </form>
@@ -585,6 +609,8 @@ func (h *Handler) GenerateReading(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logPositions(reading, req.Location, req.DateTime)
+
 	htmlOut, err := h.bodygraph.GenerateHTML(reading)
 	if err != nil {
 		http.Error(w, "Generation error: "+err.Error(), http.StatusInternalServerError)
@@ -593,6 +619,33 @@ func (h *Handler) GenerateReading(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(htmlOut))
+}
+
+// logPositions prints all planetary positions as JSON to the terminal.
+func logPositions(reading *calculator.Reading, location, datetimeUTC string) {
+	type gateLog struct {
+		Planet    string  `json:"planet"`
+		Gate      int     `json:"gate"`
+		Line      int     `json:"line"`
+		Longitude float64 `json:"longitude"`
+	}
+	toLog := func(gates []calculator.Gate) []gateLog {
+		out := make([]gateLog, len(gates))
+		for i, g := range gates {
+			out[i] = gateLog{g.Planet, g.Number, g.Line, g.Longitude}
+		}
+		return out
+	}
+	payload := map[string]interface{}{
+		"location":          location,
+		"datetime_utc":      datetimeUTC,
+		"type":              reading.Type,
+		"personality_gates": toLog(reading.PersonalityGates),
+		"design_gates":      toLog(reading.DesignGates),
+	}
+	if b, err := json.MarshalIndent(payload, "", "  "); err == nil {
+		log.Printf("=== HD Chart Positions ===\n%s", string(b))
+	}
 }
 
 // GetReadingJSON returns the reading as JSON
