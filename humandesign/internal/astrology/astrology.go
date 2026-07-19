@@ -196,9 +196,10 @@ func calculateAscendant(dt time.Time, lat, lon float64) float64 {
 	// Obliquity of the ecliptic (approximately 23.4393 degrees)
 	obliquity := 23.4393 * math.Pi / 180.0
 
-	// Ascendant formula
-	y := -math.Cos(lstRad)
-	x := math.Sin(lstRad)*math.Cos(obliquity) + math.Tan(latRad)*math.Sin(obliquity)
+	// Ascendant formula: atan2(cos(RAMC), -(sin(RAMC)cos(e) + tan(lat)sin(e)))
+	// This quadrant convention yields the rising point (not the descendant).
+	y := math.Cos(lstRad)
+	x := -(math.Sin(lstRad)*math.Cos(obliquity) + math.Tan(latRad)*math.Sin(obliquity))
 
 	asc := math.Atan2(y, x) * 180.0 / math.Pi
 	asc = normalizeAngle(asc)

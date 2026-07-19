@@ -49,12 +49,14 @@ type ReadingRequest struct {
 const navCSS = `
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: #f1eee7;
+    color: #2b2620;
     min-height: 100vh;
 }
 nav {
-    background: rgba(26,26,46,0.95);
+    background: #ffffff;
+    border-bottom: 1px solid #e3ddd0;
     padding: 0 30px;
     display: flex;
     align-items: center;
@@ -62,92 +64,111 @@ nav {
     position: sticky;
     top: 0;
     z-index: 100;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 nav .brand {
-    color: #FFD700;
-    font-size: 1.3rem;
-    font-weight: bold;
+    color: #2b2620;
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 3px;
     margin-right: 30px;
-    padding: 15px 0;
+    padding: 18px 0;
 }
 nav a {
-    color: #ccc;
+    color: #8b8478;
     text-decoration: none;
-    padding: 15px 20px;
+    padding: 18px 18px;
+    font-size: 0.85rem;
     font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
     transition: color 0.2s, border-bottom 0.2s;
-    border-bottom: 3px solid transparent;
+    border-bottom: 2px solid transparent;
 }
-nav a:hover { color: white; }
-nav a.active { color: #FFD700; border-bottom-color: #FFD700; }
+nav a:hover { color: #2b2620; }
+nav a.active { color: #b03a2e; border-bottom-color: #b03a2e; }
 .page-container {
     max-width: 900px;
-    margin: 30px auto;
+    margin: 36px auto;
     padding: 0 20px;
 }
 .card {
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-    padding: 35px;
-    margin-bottom: 25px;
+    background: #ffffff;
+    border: 1px solid #e3ddd0;
+    padding: 30px;
+    margin-bottom: 24px;
 }
-.card h2 { color: #333; margin-bottom: 20px; font-size: 1.5rem; }
-.card h3 { color: #764ba2; margin: 18px 0 10px; font-size: 1rem; text-transform: uppercase; letter-spacing: 1px; }
+.card h2 {
+    color: #2b2620; margin-bottom: 20px; font-size: 1.05rem;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 2.5px;
+    padding-bottom: 12px; border-bottom: 1px solid #e3ddd0;
+}
+.card h3 {
+    color: #8b8478; margin: 18px 0 8px; font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 2px;
+}
 .form-group { margin-bottom: 18px; }
-label { display: block; margin-bottom: 6px; color: #333; font-weight: 600; }
-input[type="date"], input[type="time"], input[type="text"], input[type="number"] {
-    width: 100%; padding: 11px 14px; border: 2px solid #e0e0e0; border-radius: 10px;
-    font-size: 1rem; transition: border-color 0.3s;
+label {
+    display: block; margin-bottom: 6px; color: #8b8478; font-size: 0.72rem;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 2px;
 }
-input:focus { outline: none; border-color: #764ba2; }
+input[type="date"], input[type="time"], input[type="text"], input[type="number"] {
+    width: 100%; padding: 11px 14px; border: 1px solid #d8d1c3; border-radius: 2px;
+    background: #fdfcfa; font-size: 1rem; color: #2b2620; transition: border-color 0.2s;
+}
+input:focus { outline: none; border-color: #b03a2e; }
 .row { display: flex; gap: 15px; }
 .row .form-group { flex: 1; }
 button, .btn {
-    padding: 13px 28px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white; border: none; border-radius: 10px; font-size: 1rem; font-weight: 600;
-    cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; text-decoration: none; display: inline-block;
+    padding: 12px 30px; background: #26241f;
+    color: white; border: none; border-radius: 2px; font-size: 0.85rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 2px;
+    cursor: pointer; transition: background 0.2s; text-decoration: none; display: inline-block;
 }
-button:hover, .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(118,75,162,0.4); }
-.btn-sm { padding: 8px 16px; font-size: 0.85rem; border-radius: 8px; }
-.btn-danger { background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); }
-.btn-success { background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); }
+button:hover, .btn:hover { background: #b03a2e; }
+.btn-sm { padding: 8px 16px; font-size: 0.72rem; }
+.btn-danger { background: #b03a2e; }
+.btn-danger:hover { background: #8e2f25; }
+.btn-success { background: #57a05a; }
+.btn-success:hover { background: #468148; }
 table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
-th { background: #f8f9fa; color: #555; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
-tr:hover { background: #f8f0ff; }
-.tag { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; margin: 2px; }
-.tag-fire { background: #ffe0cc; color: #d35400; }
-.tag-earth { background: #d5f5e3; color: #27ae60; }
-.tag-air { background: #d6eaf8; color: #2980b9; }
-.tag-water { background: #e8daef; color: #8e44ad; }
-.tag-harmonious { background: #d5f5e3; color: #27ae60; }
-.tag-challenging { background: #fadbd8; color: #c0392b; }
-.tag-neutral { background: #fdebd0; color: #e67e22; }
-.tag-personality { background: #333; color: white; }
-.tag-design { background: #8B0000; color: white; }
-.strength-very-strong { color: #c0392b; font-weight: bold; }
-.strength-strong { color: #e67e22; font-weight: 600; }
-.strength-moderate { color: #2980b9; }
-.strength-weak { color: #95a5a6; }
+th, td { padding: 11px 14px; text-align: left; border-bottom: 1px solid #eee8dc; }
+th {
+    background: #faf8f3; color: #8b8478; font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 1.5px;
+}
+tr:hover { background: #f7f4ec; }
+.tag { display: inline-block; padding: 4px 12px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; margin: 2px; }
+.tag-fire { background: #f6e3d5; color: #b45e26; }
+.tag-earth { background: #e2ecdd; color: #468148; }
+.tag-air { background: #dde8ef; color: #3d6e8f; }
+.tag-water { background: #e6e0eb; color: #6d5488; }
+.tag-harmonious { background: #e2ecdd; color: #468148; }
+.tag-challenging { background: #f2ddda; color: #b03a2e; }
+.tag-neutral { background: #f1ead9; color: #a07b2e; }
+.tag-personality { background: #26241f; color: white; }
+.tag-design { background: #b03a2e; color: white; }
+.strength-very-strong { color: #b03a2e; font-weight: bold; }
+.strength-strong { color: #b45e26; font-weight: 600; }
+.strength-moderate { color: #3d6e8f; }
+.strength-weak { color: #a49c8e; }
 .dropdown-wrap { position: relative; }
 .dropdown-list {
     display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 250px;
-    overflow-y: auto; background: white; border: 2px solid #764ba2; border-top: none;
-    border-radius: 0 0 10px 10px; z-index: 50; box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    overflow-y: auto; background: white; border: 1px solid #d8d1c3; border-top: none;
+    z-index: 50; box-shadow: 0 8px 20px rgba(43,38,32,0.1);
 }
 .dropdown-list.open { display: block; }
 .dropdown-item {
-    padding: 10px 14px; cursor: pointer; font-size: 0.95rem; border-bottom: 1px solid #f0f0f0;
+    padding: 10px 14px; cursor: pointer; font-size: 0.95rem; border-bottom: 1px solid #f2eee5;
 }
-.dropdown-item:hover, .dropdown-item.highlighted { background: #f0e6ff; }
-.dropdown-item .country { color: #999; font-size: 0.8rem; margin-left: 6px; }
-.error { background: #fee; color: #c00; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: none; }
-.spinner { border: 3px solid #f3f3f3; border-top: 3px solid #764ba2; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 10px auto; }
+.dropdown-item:hover, .dropdown-item.highlighted { background: #f4f0e6; }
+.dropdown-item .country { color: #a49c8e; font-size: 0.8rem; margin-left: 6px; }
+.error { background: #f2ddda; color: #8e2f25; padding: 15px; border: 1px solid #e4c2bd; margin-bottom: 20px; display: none; }
+.spinner { border: 3px solid #eee8dc; border-top: 3px solid #b03a2e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 10px auto; }
 @keyframes spin { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
 .loading { display: none; text-align: center; padding: 20px; }
-.info-box { background: #f8f9fa; padding: 15px; border-radius: 10px; font-size: 0.9rem; color: #666; margin-top: 15px; }
+.info-box { background: #faf8f3; border: 1px solid #eee8dc; padding: 15px; font-size: 0.9rem; color: #6d675c; margin-top: 15px; }
 `
 
 func navHTML(active string) string {
@@ -366,7 +387,7 @@ func (h *Handler) HomePage(w http.ResponseWriter, r *http.Request) {
 <div class="page-container">
 <div class="card">
     <h2>Human Design Calculator</h2>
-    <p style="color:#666;margin-bottom:20px;">Discover your unique energetic blueprint</p>` +
+    <p style="color:#8b8478;margin-bottom:20px;">Discover your unique energetic blueprint</p>` +
 		birthFormHTML() + `
 </div>
 </div>
@@ -385,7 +406,7 @@ func (h *Handler) AstrologyPage(w http.ResponseWriter, r *http.Request) {
 <div class="page-container">
 <div class="card">
     <h2>Natal Astrology Chart</h2>
-    <p style="color:#666;margin-bottom:20px;">Calculate your Western astrology natal chart with zodiac placements, houses, and aspects</p>` +
+    <p style="color:#8b8478;margin-bottom:20px;">Calculate your Western astrology natal chart with zodiac placements, houses, and aspects</p>` +
 		birthFormHTML() + `
 </div>
 </div>
@@ -404,7 +425,7 @@ func (h *Handler) AstrocartographyPage(w http.ResponseWriter, r *http.Request) {
 <div class="page-container">
 <div class="card">
     <h2>Astrocartography</h2>
-    <p style="color:#666;margin-bottom:20px;">Discover how planetary energies manifest at different locations on Earth</p>` +
+    <p style="color:#8b8478;margin-bottom:20px;">Discover how planetary energies manifest at different locations on Earth</p>` +
 		birthFormHTML() + `
 </div>
 </div>
@@ -439,7 +460,7 @@ func (h *Handler) PeoplePage(w http.ResponseWriter, r *http.Request) {
 <div class="page-container">
 <div class="card">
     <h2>People Database</h2>
-    <p style="color:#666;margin-bottom:20px;">Store birth data for quick chart generation</p>
+    <p style="color:#8b8478;margin-bottom:20px;">Store birth data for quick chart generation</p>
     <table>
         <thead><tr><th>Name</th><th>Birth Date</th><th>Birth Time</th><th>Location</th><th>Charts</th><th></th></tr></thead>
         <tbody>` + rows.String() + `</tbody>
@@ -851,7 +872,7 @@ func renderAstrocartographyHTML(chart *astrocartography.AstrocartoChart, locatio
 
 	noInfluences := ""
 	if chart.Location == nil || len(chart.Location.Influences) == 0 {
-		noInfluences = `<p style="color:#999;margin-top:10px;">No strong planetary lines near this location. Try exploring other locations using the lines listed below.</p>`
+		noInfluences = `<p style="color:#a49c8e;margin-top:10px;">No strong planetary lines near this location. Try exploring other locations using the lines listed below.</p>`
 	}
 
 	// Group lines by planet for the summary
@@ -872,7 +893,7 @@ func renderAstrocartographyHTML(chart *astrocartography.AstrocartoChart, locatio
 <div class="page-container">
 <div class="card">
     <h2>Astrocartography - %s</h2>
-    <p style="color:#666;margin-bottom:10px;">Showing planetary line influences at your specified location</p>
+    <p style="color:#8b8478;margin-bottom:10px;">Showing planetary line influences at your specified location</p>
     <h3>Planetary Influences at This Location</h3>
     %s
     <table><thead><tr><th>Planet</th><th>Line</th><th>Strength</th><th>Distance</th><th>Meaning</th></tr></thead>
@@ -881,7 +902,7 @@ func renderAstrocartographyHTML(chart *astrocartography.AstrocartoChart, locatio
 
 <div class="card">
     <h2>All Planetary Lines</h2>
-    <p style="color:#666;margin-bottom:10px;">Each planet creates 4 lines across the globe (MC, IC, ASC, DSC)</p>
+    <p style="color:#8b8478;margin-bottom:10px;">Each planet creates 4 lines across the globe (MC, IC, ASC, DSC)</p>
     <table><thead><tr><th>Planet</th><th>Lines</th><th>General Theme</th></tr></thead>
     <tbody>%s</tbody></table>
 </div>

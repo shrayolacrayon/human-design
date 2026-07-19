@@ -3,6 +3,7 @@ package integration_test
 import (
 	"encoding/json"
 	"fmt"
+	"humandesign/internal/astrology"
 	"humandesign/internal/calculator"
 	"humandesign/internal/database"
 	"os"
@@ -62,6 +63,25 @@ func TestKnownChart(t *testing.T) {
 	t.Logf("Authority: %s", reading.Authority)
 	t.Logf("Profile: %d/%d - %s", reading.Profile.Conscious, reading.Profile.Unconscious, reading.Profile.Name)
 	t.Logf("Incarnation Cross: %s", reading.IncarnationCross)
+}
+
+// TestRisingSign verifies the ascendant for a known chart.
+// 09/16/1992 1:30 PM EDT (17:30 UTC) in Nashua NH rises in Sagittarius.
+func TestRisingSign(t *testing.T) {
+	dt := time.Date(1992, 9, 16, 17, 30, 0, 0, time.UTC)
+	chart, err := astrology.NewCalculator().CalculateChart(dt, 42.7654, -71.4676)
+	if err != nil {
+		t.Fatalf("Calculate failed: %v", err)
+	}
+	if chart.RisingSign != "Sagittarius" {
+		t.Errorf("Rising sign: expected Sagittarius, got %s (ascendant %.2f°)",
+			chart.RisingSign, chart.Ascendant)
+	}
+	if chart.SunSign != "Virgo" {
+		t.Errorf("Sun sign: expected Virgo, got %s", chart.SunSign)
+	}
+	t.Logf("Ascendant: %.2f° (%s), Sun: %s, Moon: %s, MC: %s",
+		chart.Ascendant, chart.RisingSign, chart.SunSign, chart.MoonSign, chart.MCSign)
 }
 
 // TestGateLineRange checks all gates and lines are in valid ranges.
