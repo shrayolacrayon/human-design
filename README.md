@@ -22,7 +22,7 @@ colima start
 
 # Build and run
 cd humandesign
-docker compose up --build
+docker-compose up --build
 ```
 
 Then open **http://localhost:8080** in your browser.
