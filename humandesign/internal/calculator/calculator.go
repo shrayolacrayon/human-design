@@ -101,6 +101,7 @@ func (c *Calculator) positionsToGates(positions []ephemeris.PlanetaryPosition, i
 			Name:      AllGates[pos.Gate].Name,
 			Line:      pos.Line,
 			Planet:    string(pos.Planet),
+			Longitude: pos.Longitude,
 			Activated: true,
 			Design:    isDesign,
 		})

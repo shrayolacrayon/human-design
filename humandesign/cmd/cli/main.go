@@ -921,16 +921,13 @@ func lookupChannel(channelStr string) {
 		os.Exit(1)
 	}
 
-	gate1, err1 := fmt.Sscanf(parts[0], "%d")
-	gate2, err2 := fmt.Sscanf(parts[1], "%d")
+	var g1, g2 int
+	_, err1 := fmt.Sscanf(parts[0], "%d", &g1)
+	_, err2 := fmt.Sscanf(parts[1], "%d", &g2)
 	if err1 != nil || err2 != nil {
 		fmt.Fprintf(os.Stderr, "Invalid gate numbers in channel: %s\n", channelStr)
 		os.Exit(1)
 	}
-
-	var g1, g2 int
-	fmt.Sscanf(parts[0], "%d", &g1)
-	fmt.Sscanf(parts[1], "%d", &g2)
 
 	// Find the channel
 	ch := calculator.GetChannelForGates(g1, g2)
@@ -1022,7 +1019,7 @@ func lookupType(typeName string) {
 }
 
 func listAllGates() {
-	fmt.Println("All 64 Gates:\n")
+	fmt.Print("All 64 Gates:\n\n")
 	for center, centerName := range map[string]string{
 		"Head":        "Head Center",
 		"Ajna":        "Ajna Center",
@@ -1045,7 +1042,7 @@ func listAllGates() {
 }
 
 func listAllCenters() {
-	fmt.Println("The 9 Centers:\n")
+	fmt.Print("The 9 Centers:\n\n")
 	centerDescriptions := map[string]string{
 		"Head":        "Inspiration and mental pressure",
 		"Ajna":        "Conceptualization and mental processing",
@@ -1073,7 +1070,7 @@ func listAllChannels() {
 }
 
 func listAllTypes() {
-	fmt.Println("The 5 Human Design Types:\n")
+	fmt.Print("The 5 Human Design Types:\n\n")
 	types := []struct {
 		name     string
 		percent  string
@@ -1092,7 +1089,7 @@ func listAllTypes() {
 }
 
 func listAllAuthorities() {
-	fmt.Println("The 7 Authorities (in order of precedence):\n")
+	fmt.Print("The 7 Authorities (in order of precedence):\n\n")
 	authorities := []struct {
 		name        string
 		description string
@@ -1112,7 +1109,7 @@ func listAllAuthorities() {
 }
 
 func listAllProfiles() {
-	fmt.Println("The 12 Profiles:\n")
+	fmt.Print("The 12 Profiles:\n\n")
 	for profile, name := range calculator.ProfileNames {
 		fmt.Printf("%s - %s\n", profile, name)
 	}

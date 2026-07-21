@@ -57,6 +57,7 @@ type Gate struct {
 	Name      string  `json:"name"`
 	Line      int     `json:"line"`
 	Planet    string  `json:"planet"`
+	Longitude float64 `json:"longitude"` // ecliptic longitude in degrees
 	Activated bool    `json:"activated"`
 	Design    bool    `json:"design"` // true = design (red), false = personality (black)
 }

@@ -4,216 +4,292 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"strings"
+
 	"humandesign/internal/calculator"
 )
 
-// CenterPosition defines the x, y position and size of a center
-type CenterPosition struct {
-	X      int
-	Y      int
-	Width  int
-	Height int
-	Shape  string // "triangle", "square", "diamond"
+// point is an x,y coordinate in the bodygraph SVG coordinate space.
+type point struct {
+	X, Y float64
 }
 
-// ChannelPath defines the SVG path for a channel
-type ChannelPath struct {
-	Gate1   int
-	Gate2   int
-	Path    string
-	Center1 string
-	Center2 string
+// gateAnchors maps each of the 64 gates to its position on the edge of its
+// center, matching the traditional bodygraph layout.
+var gateAnchors = map[int]point{
+	// Head (top triangle)
+	64: {228, 100}, 61: {260, 100}, 63: {292, 100},
+	// Ajna (inverted triangle)
+	47: {228, 152}, 24: {260, 152}, 4: {292, 152},
+	17: {236, 184}, 43: {260, 196}, 11: {284, 184},
+	// Throat (square)
+	62: {234, 265}, 23: {260, 265}, 56: {286, 265},
+	16: {221, 284}, 20: {221, 308},
+	31: {234, 323}, 8: {260, 323}, 33: {283, 323},
+	35: {299, 282}, 12: {299, 304}, 45: {300, 328},
+	// G (diamond)
+	7: {240, 382}, 1: {260, 371}, 13: {280, 382},
+	10: {213, 412}, 25: {297, 424},
+	15: {234, 443}, 2: {260, 456}, 46: {286, 443},
+	// Heart (small triangle)
+	21: {356, 437}, 51: {341, 447}, 26: {349, 464}, 40: {381, 440},
+	// Spleen (left triangle)
+	48: {88, 522}, 57: {104, 536}, 44: {118, 550}, 50: {130, 562},
+	32: {118, 580}, 28: {104, 594}, 18: {88, 608},
+	// Solar Plexus (right triangle)
+	36: {432, 522}, 22: {416, 536}, 37: {402, 550}, 6: {390, 562},
+	49: {402, 580}, 55: {416, 594}, 30: {432, 608},
+	// Sacral (square)
+	5: {234, 561}, 14: {260, 561}, 29: {286, 561},
+	34: {221, 582}, 27: {220, 604}, 59: {299, 592},
+	42: {236, 614}, 3: {260, 614}, 9: {286, 614},
+	// Root (square)
+	53: {234, 668}, 60: {260, 668}, 52: {286, 668},
+	54: {221, 688}, 38: {221, 708}, 58: {221, 728},
+	19: {299, 688}, 39: {299, 708}, 41: {299, 728},
+}
+
+// channelCurves gives a quadratic Bezier control point for channels that
+// curve around the outside of the body instead of cutting straight across.
+var channelCurves = map[[2]int]point{
+	{35, 36}: {430, 385}, // Throat right -> Solar Plexus, outer right
+	{12, 22}: {402, 404},
+	{16, 48}: {90, 385}, // Throat left -> Spleen, outer left
+	{20, 57}: {118, 404},
+	{26, 44}: {240, 514}, // Heart -> Spleen, sweeping under G
+}
+
+// channelPairs lists all 36 channels as gate pairs; each channel is drawn as
+// two half-segments colored by that gate's activation.
+var channelPairs = [][2]int{
+	// Head - Ajna
+	{64, 47}, {61, 24}, {63, 4},
+	// Ajna - Throat
+	{17, 62}, {43, 23}, {11, 56},
+	// Throat - G
+	{31, 7}, {8, 1}, {33, 13}, {20, 10},
+	// Throat - Spleen / Sacral (integration)
+	{16, 48}, {20, 57}, {20, 34},
+	// Throat - Heart / Solar Plexus
+	{45, 21}, {35, 36}, {12, 22},
+	// G - Sacral / Heart / Spleen
+	{15, 5}, {2, 14}, {46, 29}, {10, 34}, {25, 51}, {10, 57},
+	// Heart - Spleen / Solar Plexus
+	{26, 44}, {40, 37},
+	// Sacral - Spleen / Solar Plexus
+	{27, 50}, {34, 57}, {59, 6},
+	// Sacral - Root
+	{42, 53}, {3, 60}, {9, 52},
+	// Spleen - Root
+	{18, 58}, {28, 38}, {32, 54},
+	// Solar Plexus - Root
+	{30, 41}, {55, 39}, {49, 19},
+}
+
+// Traditional center colors used when a center is defined.
+const (
+	colorYellow  = "#f6df4e" // Head, G
+	colorGreen   = "#57a05a" // Ajna
+	colorBrown   = "#c19a6b" // Throat, Spleen, Solar Plexus, Root
+	colorRed     = "#d94f3d" // Heart, Sacral
+	colorDesign  = "#b03a2e" // design (red) activations
+	colorPers    = "#26241f" // personality (black) activations
+	colorTrack   = "#e8e3d7" // undefined channel track
+	colorOutline = "#7a7264" // center outlines
+)
+
+// centerShape describes how to draw one of the nine centers.
+type centerShape struct {
+	Name   string
+	Kind   string // "poly" or "rect"
+	Points string // polygon points
+	X, Y   float64
+	W, H   float64
+	Fill   string // fill when defined
+}
+
+var centerShapes = []centerShape{
+	{Name: "Head", Kind: "poly", Points: "260,38 205,112 315,112", Fill: colorYellow},
+	{Name: "Ajna", Kind: "poly", Points: "205,140 315,140 260,218", Fill: colorGreen},
+	{Name: "Throat", Kind: "rect", X: 210, Y: 252, W: 100, H: 84, Fill: colorBrown},
+	{Name: "G", Kind: "poly", Points: "260,358 318,412 260,466 202,412", Fill: colorYellow},
+	{Name: "Heart", Kind: "poly", Points: "330,432 398,424 360,482", Fill: colorRed},
+	{Name: "Spleen", Kind: "poly", Points: "60,490 60,640 150,565", Fill: colorBrown},
+	{Name: "SolarPlexus", Kind: "poly", Points: "460,490 460,640 370,565", Fill: colorBrown},
+	{Name: "Sacral", Kind: "rect", X: 210, Y: 548, W: 100, H: 78, Fill: colorRed},
+	{Name: "Root", Kind: "rect", X: 210, Y: 660, W: 100, H: 84, Fill: colorBrown},
 }
 
 // Generator creates SVG body graphs
-type Generator struct {
-	centerPositions map[string]CenterPosition
-	channelPaths    []ChannelPath
-}
+type Generator struct{}
 
 // NewGenerator creates a new body graph generator
 func NewGenerator() *Generator {
-	g := &Generator{
-		centerPositions: map[string]CenterPosition{
-			"Head":        {X: 200, Y: 30, Width: 60, Height: 50, Shape: "triangle"},
-			"Ajna":        {X: 200, Y: 100, Width: 60, Height: 50, Shape: "triangle"},
-			"Throat":      {X: 200, Y: 180, Width: 70, Height: 50, Shape: "square"},
-			"G":           {X: 200, Y: 280, Width: 60, Height: 60, Shape: "diamond"},
-			"Heart":       {X: 280, Y: 260, Width: 50, Height: 45, Shape: "triangle"},
-			"Spleen":      {X: 100, Y: 340, Width: 50, Height: 60, Shape: "triangle"},
-			"SolarPlexus": {X: 300, Y: 340, Width: 50, Height: 60, Shape: "triangle"},
-			"Sacral":      {X: 200, Y: 380, Width: 70, Height: 50, Shape: "square"},
-			"Root":        {X: 200, Y: 470, Width: 70, Height: 50, Shape: "square"},
-		},
-	}
-	g.initChannelPaths()
-	return g
+	return &Generator{}
 }
 
-func (g *Generator) initChannelPaths() {
-	// Define paths connecting centers through their gates
-	g.channelPaths = []ChannelPath{
-		// Head to Ajna
-		{64, 47, "M 200 80 L 200 100", "Head", "Ajna"},
-		{63, 4, "M 220 80 L 220 100", "Head", "Ajna"},
-		{61, 24, "M 180 80 L 180 100", "Head", "Ajna"},
-
-		// Ajna to Throat
-		{43, 23, "M 200 150 L 200 180", "Ajna", "Throat"},
-		{17, 62, "M 220 150 L 220 180", "Ajna", "Throat"},
-		{11, 56, "M 180 150 L 180 180", "Ajna", "Throat"},
-
-		// Throat to G
-		{31, 7, "M 200 230 L 200 280", "Throat", "G"},
-		{8, 1, "M 185 230 L 185 280", "Throat", "G"},
-		{33, 13, "M 215 230 L 215 280", "Throat", "G"},
-
-		// Throat to Solar Plexus
-		{35, 36, "M 235 210 Q 280 280 300 340", "Throat", "SolarPlexus"},
-		{12, 22, "M 245 200 Q 290 270 310 340", "Throat", "SolarPlexus"},
-
-		// Throat to Heart
-		{45, 21, "M 250 200 L 280 260", "Throat", "Heart"},
-
-		// Throat to Spleen
-		{16, 48, "M 165 210 Q 120 280 100 340", "Throat", "Spleen"},
-		{20, 57, "M 155 200 Q 110 270 100 330", "Throat", "Spleen"},
-
-		// G to Sacral
-		{15, 5, "M 200 340 L 200 380", "G", "Sacral"},
-		{2, 14, "M 185 340 L 185 380", "G", "Sacral"},
-		{10, 34, "M 175 320 L 170 380", "G", "Sacral"},
-		{46, 29, "M 225 320 L 230 380", "G", "Sacral"},
-
-		// G to Heart
-		{25, 51, "M 240 290 L 280 270", "G", "Heart"},
-
-		// G to Spleen
-		{10, 57, "M 160 300 L 125 340", "G", "Spleen"},
-
-		// Heart to Spleen
-		{26, 44, "M 260 285 Q 180 320 125 340", "Heart", "Spleen"},
-
-		// Heart to Solar Plexus
-		{37, 40, "M 300 290 L 310 340", "Heart", "SolarPlexus"},
-
-		// Sacral to Spleen
-		{50, 27, "M 165 395 L 125 370", "Sacral", "Spleen"},
-		{34, 57, "M 155 390 L 120 350", "Sacral", "Spleen"},
-
-		// Sacral to Solar Plexus
-		{59, 6, "M 245 395 L 290 370", "Sacral", "SolarPlexus"},
-
-		// Sacral to Root
-		{42, 53, "M 185 430 L 185 470", "Sacral", "Root"},
-		{3, 60, "M 200 430 L 200 470", "Sacral", "Root"},
-		{9, 52, "M 215 430 L 215 470", "Sacral", "Root"},
-
-		// Spleen to Root
-		{18, 58, "M 115 400 L 165 470", "Spleen", "Root"},
-		{28, 38, "M 100 400 L 155 475", "Spleen", "Root"},
-		{32, 54, "M 125 400 L 175 470", "Spleen", "Root"},
-
-		// Solar Plexus to Root
-		{36, 35, "M 300 400 L 245 470", "SolarPlexus", "Root"},
-		{49, 19, "M 310 400 L 255 475", "SolarPlexus", "Root"},
-		{55, 39, "M 290 400 L 235 470", "SolarPlexus", "Root"},
-		{30, 41, "M 320 400 L 265 470", "SolarPlexus", "Root"},
-	}
-}
-
-// GenerateSVG creates an SVG visualization of a Human Design reading
+// GenerateSVG creates an SVG visualization of a Human Design reading in the
+// traditional bodygraph style: channels drawn as red (design) / black
+// (personality) half-segments, striped when activated by both, with gate
+// number badges on each center.
 func (g *Generator) GenerateSVG(reading *calculator.Reading) (string, error) {
-	tmpl := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 550" width="400" height="550">
-  <defs>
-    <style>
-      .center-undefined { fill: white; stroke: #333; stroke-width: 2; }
-      .center-defined { fill: #FFD700; stroke: #333; stroke-width: 2; }
-      .channel-undefined { stroke: #ddd; stroke-width: 3; fill: none; }
-      .channel-defined { stroke: #8B0000; stroke-width: 4; fill: none; }
-      .center-label { font-family: Arial, sans-serif; font-size: 10px; text-anchor: middle; fill: #333; }
-      .gate-label { font-family: Arial, sans-serif; font-size: 8px; fill: #666; }
-      .title { font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; text-anchor: middle; }
-    </style>
-  </defs>
-  
-  <rect width="400" height="550" fill="#f8f9fa"/>
-  
-  <!-- Channels -->
-  {{range .Channels}}
-  <path d="{{.Path}}" class="{{if .Defined}}channel-defined{{else}}channel-undefined{{end}}"/>
-  {{end}}
-  
-  <!-- Centers -->
-  {{range $name, $center := .Centers}}
-  {{$pos := index $.Positions $name}}
-  {{if eq $pos.Shape "triangle"}}
-  <polygon points="{{$pos.X}},{{minus $pos.Y 25}} {{minus $pos.X 30}},{{plus $pos.Y 25}} {{plus $pos.X 30}},{{plus $pos.Y 25}}" 
-           class="{{if $center.Defined}}center-defined{{else}}center-undefined{{end}}"/>
-  {{else if eq $pos.Shape "square"}}
-  <rect x="{{minus $pos.X 35}}" y="{{minus $pos.Y 25}}" width="70" height="50" rx="5"
-        class="{{if $center.Defined}}center-defined{{else}}center-undefined{{end}}"/>
-  {{else if eq $pos.Shape "diamond"}}
-  <polygon points="{{$pos.X}},{{minus $pos.Y 30}} {{minus $pos.X 30}},{{$pos.Y}} {{$pos.X}},{{plus $pos.Y 30}} {{plus $pos.X 30}},{{$pos.Y}}"
-           class="{{if $center.Defined}}center-defined{{else}}center-undefined{{end}}"/>
-  {{end}}
-  <text x="{{$pos.X}}" y="{{plus $pos.Y 5}}" class="center-label">{{$name}}</text>
-  {{end}}
-  
-</svg>`
-
-	// Create template functions
-	funcMap := template.FuncMap{
-		"plus": func(a, b int) int {
-			return a + b
-		},
-		"minus": func(a, b int) int {
-			return a - b
-		},
+	pers := map[int]bool{}
+	des := map[int]bool{}
+	for _, gt := range reading.PersonalityGates {
+		pers[gt.Number] = true
+	}
+	for _, gt := range reading.DesignGates {
+		des[gt.Number] = true
 	}
 
-	// Prepare channel data with defined status
-	type ChannelData struct {
-		Path    string
-		Defined bool
-	}
-	channelData := []ChannelData{}
-	
-	definedChannels := make(map[string]bool)
-	for _, ch := range reading.Channels {
-		if ch.Defined {
-			key := fmt.Sprintf("%d-%d", ch.Gate1, ch.Gate2)
-			definedChannels[key] = true
-			key2 := fmt.Sprintf("%d-%d", ch.Gate2, ch.Gate1)
-			definedChannels[key2] = true
+	var b strings.Builder
+	b.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 760" class="bodygraph-svg">`)
+	b.WriteString(`<defs><linearGradient id="splitPB" x1="0" y1="0" x2="1" y2="0">` +
+		`<stop offset="50%" stop-color="` + colorPers + `"/>` +
+		`<stop offset="50%" stop-color="` + colorDesign + `"/>` +
+		`</linearGradient></defs>`)
+
+	// Channels (drawn first so center shapes sit on top)
+	for _, ch := range channelPairs {
+		a1, a2 := gateAnchors[ch[0]], gateAnchors[ch[1]]
+		if ctrl, ok := curveFor(ch); ok {
+			// Split the quadratic Bezier at t=0.5 so each half can be
+			// colored independently.
+			c1 := point{(a1.X + ctrl.X) / 2, (a1.Y + ctrl.Y) / 2}
+			c2 := point{(a2.X + ctrl.X) / 2, (a2.Y + ctrl.Y) / 2}
+			mid := point{(a1.X + 2*ctrl.X + a2.X) / 4, (a1.Y + 2*ctrl.Y + a2.Y) / 4}
+			writeCurveHalf(&b, a1, c1, mid, pers[ch[0]], des[ch[0]])
+			writeCurveHalf(&b, a2, c2, mid, pers[ch[1]], des[ch[1]])
+		} else {
+			mid := point{(a1.X + a2.X) / 2, (a1.Y + a2.Y) / 2}
+			writeChannelHalf(&b, a1, mid, pers[ch[0]], des[ch[0]])
+			writeChannelHalf(&b, a2, mid, pers[ch[1]], des[ch[1]])
 		}
 	}
 
-	for _, cp := range g.channelPaths {
-		key := fmt.Sprintf("%d-%d", cp.Gate1, cp.Gate2)
-		channelData = append(channelData, ChannelData{
-			Path:    cp.Path,
-			Defined: definedChannels[key],
+	// Centers
+	for _, cs := range centerShapes {
+		fill := "#ffffff"
+		if c, ok := reading.Centers[cs.Name]; ok && c.Defined {
+			fill = cs.Fill
+		}
+		if cs.Kind == "rect" {
+			fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" rx="7" fill="%s" stroke="%s" stroke-width="1.5"/>`,
+				cs.X, cs.Y, cs.W, cs.H, fill, colorOutline)
+		} else {
+			fmt.Fprintf(&b, `<polygon points="%s" fill="%s" stroke="%s" stroke-width="1.5"/>`,
+				cs.Points, fill, colorOutline)
+		}
+	}
+
+	// Gate number badges (iterate 1-64 for deterministic output)
+	for gate := 1; gate <= 64; gate++ {
+		p, ok := gateAnchors[gate]
+		if !ok {
+			continue
+		}
+		var fill, textColor, stroke string
+		switch {
+		case pers[gate] && des[gate]:
+			fill, textColor, stroke = "url(#splitPB)", "#ffffff", "none"
+		case pers[gate]:
+			fill, textColor, stroke = colorPers, "#ffffff", "none"
+		case des[gate]:
+			fill, textColor, stroke = colorDesign, "#ffffff", "none"
+		default:
+			fill, textColor, stroke = "#ffffff", "#a49c8e", "#cfc8ba"
+		}
+		fmt.Fprintf(&b, `<circle cx="%.0f" cy="%.0f" r="8" fill="%s" stroke="%s" stroke-width="1"/>`,
+			p.X, p.Y, fill, stroke)
+		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" text-anchor="middle" font-family="Arial, sans-serif" font-size="8.5" font-weight="bold" fill="%s">%d</text>`,
+			p.X, p.Y+3, textColor, gate)
+	}
+
+	b.WriteString(`</svg>`)
+	return b.String(), nil
+}
+
+func curveFor(ch [2]int) (point, bool) {
+	if p, ok := channelCurves[ch]; ok {
+		return p, true
+	}
+	if p, ok := channelCurves[[2]int{ch[1], ch[0]}]; ok {
+		return p, true
+	}
+	return point{}, false
+}
+
+// strokePasses returns the stroke color/dash passes for a half-channel:
+// design red, personality black, candy-striped when both, faint track when
+// inactive.
+func strokePasses(p, d bool) [][2]string {
+	switch {
+	case p && d:
+		return [][2]string{{colorDesign, ""}, {colorPers, ` stroke-dasharray="5,5"`}}
+	case p:
+		return [][2]string{{colorPers, ""}}
+	case d:
+		return [][2]string{{colorDesign, ""}}
+	default:
+		return [][2]string{{colorTrack, ""}}
+	}
+}
+
+func writeChannelHalf(b *strings.Builder, from, to point, p, d bool) {
+	for _, pass := range strokePasses(p, d) {
+		fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="6"%s/>`,
+			from.X, from.Y, to.X, to.Y, pass[0], pass[1])
+	}
+}
+
+func writeCurveHalf(b *strings.Builder, from, ctrl, to point, p, d bool) {
+	for _, pass := range strokePasses(p, d) {
+		fmt.Fprintf(b, `<path d="M %.1f %.1f Q %.1f %.1f %.1f %.1f" fill="none" stroke="%s" stroke-width="6"%s/>`,
+			from.X, from.Y, ctrl.X, ctrl.Y, to.X, to.Y, pass[0], pass[1])
+	}
+}
+
+// planetColumnOrder is the traditional Jovian Archive column ordering.
+var planetColumnOrder = []string{
+	"Sun", "Earth", "North Node", "South Node", "Moon", "Mercury",
+	"Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto",
+}
+
+var planetSymbols = map[string]string{
+	"Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀",
+	"Mars": "♂", "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅",
+	"Neptune": "♆", "Pluto": "♇", "North Node": "☊",
+	"South Node": "☋", "Earth": "⊕",
+}
+
+type columnRow struct {
+	Symbol string
+	Planet string
+	Num    string
+}
+
+func buildColumn(gates []calculator.Gate) []columnRow {
+	byPlanet := map[string]calculator.Gate{}
+	for _, g := range gates {
+		byPlanet[g.Planet] = g
+	}
+	rows := []columnRow{}
+	for _, p := range planetColumnOrder {
+		g, ok := byPlanet[p]
+		if !ok {
+			continue
+		}
+		sym := planetSymbols[p]
+		if sym == "" {
+			sym = "★"
+		}
+		rows = append(rows, columnRow{
+			Symbol: sym,
+			Planet: p,
+			Num:    fmt.Sprintf("%d.%d", g.Number, g.Line),
 		})
 	}
-
-	data := map[string]interface{}{
-		"Centers":   reading.Centers,
-		"Channels":  channelData,
-		"Positions": g.centerPositions,
-	}
-
-	t, err := template.New("bodygraph").Funcs(funcMap).Parse(tmpl)
-	if err != nil {
-		return "", fmt.Errorf("template parse error: %w", err)
-	}
-
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("template execute error: %w", err)
-	}
-
-	return buf.String(), nil
+	return rows
 }
 
 // GenerateHTML creates a complete HTML page with the body graph and reading details
@@ -228,200 +304,259 @@ func (g *Generator) GenerateHTML(reading *calculator.Reading) (string, error) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Human Design Reading</title>
+    <title>Human Design Chart</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: #f1eee7;
+            color: #2b2620;
             min-height: 100vh;
-            padding: 20px;
+            padding: 40px 20px;
         }
-        .container { 
-            max-width: 1200px; 
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
-        .header {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-        .header h1 { font-size: 2.5rem; margin-bottom: 10px; }
-        .header .type-badge {
-            display: inline-block;
-            background: #FFD700;
-            color: #1a1a2e;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-weight: bold;
-            font-size: 1.2rem;
-        }
-        .content { display: flex; flex-wrap: wrap; }
-        .bodygraph-section {
-            flex: 1;
-            min-width: 300px;
-            padding: 30px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: #f8f9fa;
-        }
-        .details-section {
-            flex: 1;
-            min-width: 300px;
-            padding: 30px;
-        }
-        .detail-card {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 15px;
-        }
-        .detail-card h3 {
-            color: #764ba2;
-            margin-bottom: 10px;
-            font-size: 0.9rem;
+        .page { max-width: 1080px; margin: 0 auto; }
+        .chart-header { text-align: center; margin-bottom: 30px; }
+        .chart-header h1 {
+            font-size: 1.6rem;
+            font-weight: 300;
+            letter-spacing: 6px;
             text-transform: uppercase;
+            color: #2b2620;
+        }
+        .chart-header .birth-info {
+            margin-top: 8px;
+            font-size: 0.9rem;
+            color: #8b8478;
             letter-spacing: 1px;
         }
-        .detail-card p {
-            font-size: 1.1rem;
-            color: #333;
+        .chart-header .type-line {
+            margin-top: 12px;
+            font-size: 1.05rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #b03a2e;
         }
-        .gates-section {
-            margin-top: 20px;
+        .card {
+            background: #ffffff;
+            border: 1px solid #e3ddd0;
+            padding: 30px;
+            margin-bottom: 24px;
         }
-        .planet-list {
-            margin-top: 15px;
+        .chart-flex {
+            display: grid;
+            grid-template-columns: 130px 1fr 130px;
+            gap: 10px;
+            align-items: start;
         }
-        .planet-item {
+        .bodygraph-svg { width: 100%; max-width: 470px; height: auto; display: block; margin: 0 auto; }
+        .pcol { padding-top: 30px; }
+        .pcol-header {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 2.5px;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+            border-bottom: 2px solid;
+            text-align: center;
+        }
+        .pcol.design .pcol-header { color: #b03a2e; border-color: #b03a2e; }
+        .pcol.personality .pcol-header { color: #26241f; border-color: #26241f; }
+        .prow {
             display: flex;
             align-items: center;
-            padding: 12px 15px;
-            margin: 8px 0;
-            border-radius: 8px;
-            transition: transform 0.2s;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.98rem;
+            line-height: 2.1;
         }
-        .planet-item:hover {
-            transform: translateX(5px);
+        .prow .glyph { width: 22px; text-align: center; font-size: 1.05rem; color: #8b8478; }
+        .pcol.design .prow .num { color: #b03a2e; font-weight: 600; }
+        .pcol.personality .prow .num { color: #26241f; font-weight: 600; }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 26px;
+            margin-top: 20px;
+            font-size: 0.78rem;
+            color: #8b8478;
+            letter-spacing: 1px;
         }
-        .personality-planet {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-            color: white;
-            border-left: 4px solid #333;
+        .legend .swatch {
+            display: inline-block;
+            width: 22px; height: 6px;
+            margin-right: 6px;
+            vertical-align: middle;
         }
-        .design-planet {
-            background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
-            color: white;
-            border-left: 4px solid #8B0000;
+        .props {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            column-gap: 50px;
         }
-        .planet-symbol {
-            font-weight: bold;
-            font-size: 1rem;
-            min-width: 100px;
-            margin-right: 15px;
-        }
-        .gate-number {
-            font-weight: 600;
+        .prop-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 11px 2px;
+            border-bottom: 1px solid #eee8dc;
             font-size: 0.95rem;
-            min-width: 80px;
-            margin-right: 15px;
         }
-        .gate-name {
-            font-size: 0.9rem;
-            opacity: 0.9;
-            flex: 1;
+        .prop-row .label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #8b8478;
         }
-        .channels-section { margin-top: 20px; }
-        .channel-item {
-            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-            padding: 10px 15px;
-            border-radius: 8px;
-            margin: 5px 0;
-            font-weight: 500;
+        .prop-row .value { text-align: right; font-weight: 500; }
+        .prop-row.wide { grid-column: 1 / -1; }
+        .section-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: #8b8478;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e3ddd0;
+        }
+        .tables-flex { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        .gate-table { width: 100%; border-collapse: collapse; }
+        .gate-table td {
+            padding: 7px 6px;
+            font-size: 0.88rem;
+            border-bottom: 1px solid #f2eee5;
+        }
+        .gate-table tr:last-child td { border-bottom: none; }
+        .planet-cell { white-space: nowrap; font-weight: 500; }
+        .planet-sym { margin-right: 6px; color: #8b8478; }
+        .gate-num-personality, .gate-num-design {
+            padding: 2px 9px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            color: white;
+            white-space: nowrap;
+        }
+        .gate-num-personality { background: #26241f; }
+        .gate-num-design { background: #b03a2e; }
+        .gate-name-cell { color: #6d675c; }
+        .lon-cell { color: #b3aca0; font-size: 0.76rem; text-align: right; }
+        .channel-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 2px;
+            border-bottom: 1px solid #f2eee5;
+            font-size: 0.92rem;
+        }
+        .channel-row:last-child { border-bottom: none; }
+        .channel-key {
+            min-width: 64px;
+            text-align: center;
+            padding: 3px 0;
+            font-weight: 600;
+            font-size: 0.82rem;
+            color: white;
+            background: linear-gradient(90deg, #26241f 50%, #b03a2e 50%);
+            border-radius: 10px;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 18px;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #8b8478;
+            text-decoration: none;
+        }
+        .back-link:hover { color: #b03a2e; }
+        @media (max-width: 760px) {
+            .chart-flex { grid-template-columns: 74px 1fr 74px; gap: 4px; }
+            .prow { font-size: 0.82rem; gap: 4px; }
+            .prow .glyph { width: 16px; font-size: 0.9rem; }
+            .props, .tables-flex { grid-template-columns: 1fr; }
+            .card { padding: 18px; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Human Design Chart</h1>
-            <span class="type-badge">{{.Type}}</span>
+    <div class="page">
+        <a class="back-link" href="/">&larr; New Chart</a>
+        <div class="chart-header">
+            <h1>Human Design</h1>
+            {{if .Location}}<div class="birth-info">{{.Location}} &middot; {{.BirthDateTime}}</div>{{end}}
+            <div class="type-line">{{.Type}}</div>
         </div>
-        <div class="content">
-            <div class="bodygraph-section">
-                {{.SVG}}
-            </div>
-            <div class="details-section">
-                <div class="detail-card">
-                    <h3>Strategy</h3>
-                    <p>{{.Strategy}}</p>
-                </div>
-                <div class="detail-card">
-                    <h3>Authority</h3>
-                    <p>{{.Authority}}</p>
-                </div>
-                <div class="detail-card">
-                    <h3>Profile</h3>
-                    <p>{{.Profile.Conscious}}/{{.Profile.Unconscious}} - {{.Profile.Name}}</p>
-                </div>
-                <div class="detail-card">
-                    <h3>Definition</h3>
-                    <p>{{.Definition}}</p>
-                </div>
-                <div class="detail-card">
-                    <h3>Signature & Not-Self Theme</h3>
-                    <p>Signature: <strong>{{.Signature}}</strong></p>
-                    <p>Not-Self: <strong>{{.NotSelfTheme}}</strong></p>
-                </div>
-                <div class="detail-card">
-                    <h3>Incarnation Cross</h3>
-                    <p>{{.IncarnationCross}}</p>
-                </div>
-                
-                <div class="gates-section">
-                    <div class="detail-card">
-                        <h3>Personality Planets (Conscious - Black)</h3>
-                        <div class="planet-list">
-                            {{range .PersonalityGates}}
-                            <div class="planet-item personality-planet">
-                                <span class="planet-symbol">{{.Planet}}</span>
-                                <span class="gate-number">Gate {{.Number}}.{{.Line}}</span>
-                                <span class="gate-name">{{.Name}}</span>
-                            </div>
-                            {{end}}
-                        </div>
-                    </div>
-                    <div class="detail-card">
-                        <h3>Design Planets (Unconscious - Red)</h3>
-                        <div class="planet-list">
-                            {{range .DesignGates}}
-                            <div class="planet-item design-planet">
-                                <span class="planet-symbol">{{.Planet}}</span>
-                                <span class="gate-number">Gate {{.Number}}.{{.Line}}</span>
-                                <span class="gate-name">{{.Name}}</span>
-                            </div>
-                            {{end}}
-                        </div>
-                    </div>
-                </div>
 
-                <div class="channels-section">
-                    <div class="detail-card">
-                        <h3>Defined Channels</h3>
-                        {{range .Channels}}
-                        {{if .Defined}}
-                        <div class="channel-item">{{.Gate1}}-{{.Gate2}} {{.Name}}</div>
-                        {{end}}
-                        {{end}}
-                    </div>
+        <div class="card">
+            <div class="chart-flex">
+                <div class="pcol design">
+                    <div class="pcol-header">Design</div>
+                    {{range .DesignCol}}
+                    <div class="prow"><span class="glyph">{{.Symbol}}</span><span class="num">{{.Num}}</span></div>
+                    {{end}}
+                </div>
+                <div>{{.SVG}}</div>
+                <div class="pcol personality">
+                    <div class="pcol-header">Personality</div>
+                    {{range .PersonalityCol}}
+                    <div class="prow"><span class="glyph">{{.Symbol}}</span><span class="num">{{.Num}}</span></div>
+                    {{end}}
                 </div>
             </div>
+            <div class="legend">
+                <span><span class="swatch" style="background:#b03a2e"></span>Design (Unconscious)</span>
+                <span><span class="swatch" style="background:#26241f"></span>Personality (Conscious)</span>
+                <span><span class="swatch" style="background:repeating-linear-gradient(90deg,#b03a2e 0 5px,#26241f 5px 10px)"></span>Both</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="props">
+                <div class="prop-row"><span class="label">Type</span><span class="value">{{.Type}}</span></div>
+                <div class="prop-row"><span class="label">Strategy</span><span class="value">{{.Strategy}}</span></div>
+                <div class="prop-row"><span class="label">Inner Authority</span><span class="value">{{.Authority}}</span></div>
+                <div class="prop-row"><span class="label">Profile</span><span class="value">{{.Profile.Conscious}}/{{.Profile.Unconscious}} {{.Profile.Name}}</span></div>
+                <div class="prop-row"><span class="label">Definition</span><span class="value">{{.Definition}}</span></div>
+                <div class="prop-row"><span class="label">Not-Self Theme</span><span class="value">{{.NotSelfTheme}}</span></div>
+                <div class="prop-row"><span class="label">Signature</span><span class="value">{{.Signature}}</span></div>
+                <div class="prop-row"><span class="label">Incarnation Cross</span><span class="value">{{.IncarnationCross}}</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">Activations</div>
+            <div class="tables-flex">
+                <table class="gate-table">
+                    {{range .PersonalityGates}}
+                    <tr>
+                        <td class="planet-cell"><span class="planet-sym">{{planetSymbol .Planet}}</span>{{.Planet}}</td>
+                        <td><span class="gate-num-personality">{{.Number}}.{{.Line}}</span></td>
+                        <td class="gate-name-cell">{{.Name}}</td>
+                        <td class="lon-cell">{{printf "%.2f" .Longitude}}&deg;</td>
+                    </tr>
+                    {{end}}
+                </table>
+                <table class="gate-table">
+                    {{range .DesignGates}}
+                    <tr>
+                        <td class="planet-cell"><span class="planet-sym">{{planetSymbol .Planet}}</span>{{.Planet}}</td>
+                        <td><span class="gate-num-design">{{.Number}}.{{.Line}}</span></td>
+                        <td class="gate-name-cell">{{.Name}}</td>
+                        <td class="lon-cell">{{printf "%.2f" .Longitude}}&deg;</td>
+                    </tr>
+                    {{end}}
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">Defined Channels</div>
+            {{range .Channels}}
+            {{if .Defined}}
+            <div class="channel-row">
+                <span class="channel-key">{{.Gate1}}&ndash;{{.Gate2}}</span>
+                <span>{{.Name}}</span>
+            </div>
+            {{end}}
+            {{end}}
         </div>
     </div>
 </body>
@@ -439,10 +574,23 @@ func (g *Generator) GenerateHTML(reading *calculator.Reading) (string, error) {
 		"PersonalityGates": reading.PersonalityGates,
 		"DesignGates":      reading.DesignGates,
 		"Channels":         reading.Channels,
+		"PersonalityCol":   buildColumn(reading.PersonalityGates),
+		"DesignCol":        buildColumn(reading.DesignGates),
+		"Location":         reading.BirthData.Location,
+		"BirthDateTime":    reading.BirthData.DateTime.Format("Jan 2, 2006 · 15:04 UTC"),
 		"SVG":              template.HTML(svg),
 	}
 
-	t, err := template.New("reading").Parse(tmpl)
+	funcMap := template.FuncMap{
+		"planetSymbol": func(planet string) string {
+			if s, ok := planetSymbols[planet]; ok {
+				return s
+			}
+			return "★"
+		},
+		"printf": fmt.Sprintf,
+	}
+	t, err := template.New("reading").Funcs(funcMap).Parse(tmpl)
 	if err != nil {
 		return "", err
 	}

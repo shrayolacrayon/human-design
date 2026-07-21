@@ -1,9 +1,7 @@
 package storage
 
 import (
-	"human
-
-design/internal/calculator"
+	"humandesign/internal/calculator"
 	"os"
 	"path/filepath"
 	"testing"
