@@ -1,0 +1,17 @@
+# Test Dockerfile - includes Go for running tests
+FROM golang:1.22-bookworm
+
+# Install Swiss Ephemeris library
+RUN apt-get update && apt-get install -y libswe-dev && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod file
+COPY go.mod ./
+
+# Copy source code
+COPY . .
+
+# Default command runs tests
+CMD ["go", "test", "-v", "./..."]

@@ -1,0 +1,5 @@
+name,datetime,latitude,longitude,location,expected_gates,expected_channels,notes
+Gate 1 Test,1990-01-01T12:00:00Z,0.0,0.0,"Test Location","1,8","G-Throat Inspiration",Testing gate 1 activation
+Gate 64-47 Test,1990-06-15T00:00:00Z,0.0,0.0,"Test Location","64,47","Head-Ajna Abstraction",Testing channel 64-47
+Sacral Defined Test,1985-03-20T14:00:00Z,40.7128,-74.0060,"New York, NY","3,14,27,42,59","Various Sacral",Testing Sacral center definition
+Emotional Authority Test,1975-12-10T08:30:00Z,51.5074,-0.1278,"London, UK","6,22,30,36,37,49,55","Various Solar Plexus",Testing Emotional Authority

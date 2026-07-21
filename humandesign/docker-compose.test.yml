@@ -1,0 +1,33 @@
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - .:/app
+    command: go test -v ./...
+
+  test-integration:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - .:/app
+    command: go test -v -run Integration
+
+  test-coverage:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - .:/app
+    command: go test -cover ./...
+
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - .:/app
+    entrypoint: ["sh", "-c"]
+    command: ["go build -o humandesign-cli ./cmd/cli/main.go && ./humandesign-cli validate -csv testdata/birth_data.csv -verbose"]
