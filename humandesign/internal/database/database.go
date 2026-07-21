@@ -12,8 +12,9 @@ import (
 type Person struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
-	BirthDate string    `json:"birth_date"` // YYYY-MM-DD
-	BirthTime string    `json:"birth_time"` // HH:MM
+	BirthDate string    `json:"birth_date"`         // YYYY-MM-DD
+	BirthTime string    `json:"birth_time"`         // HH:MM (local wall-clock time at the birth location)
+	Timezone  string    `json:"timezone,omitempty"` // IANA tz of the birth location, e.g. "Asia/Hong_Kong"
 	Location  string    `json:"location"`
 	Latitude  float64   `json:"latitude"`
 	Longitude float64   `json:"longitude"`
