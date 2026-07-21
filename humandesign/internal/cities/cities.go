@@ -1,5 +1,7 @@
 package cities
 
+import "math"
+
 // City represents a city with its coordinates and timezone
 type City struct {
 	Name      string  `json:"name"`
@@ -12,6 +14,47 @@ type City struct {
 // Label returns the display name for the dropdown
 func (c City) Label() string {
 	return c.Name + ", " + c.Country
+}
+
+// TimezoneFor resolves an IANA timezone for a birth location.
+//
+// It first looks for an exact match on the stored location label
+// (e.g. "Hong Kong, HK"); if that fails it falls back to the nearest
+// known city by great-circle distance. This lets stored people whose
+// records predate timezone tracking still be interpreted correctly.
+// It returns "UTC" only if no cities are available at all.
+func TimezoneFor(location string, lat, lon float64) string {
+	// 1. Exact label match (matches how the frontend stores location).
+	for _, c := range All {
+		if c.Label() == location {
+			return c.Timezone
+		}
+	}
+
+	// 2. Nearest city by distance.
+	if len(All) == 0 {
+		return "UTC"
+	}
+	best := All[0]
+	bestDist := haversine(lat, lon, best.Latitude, best.Longitude)
+	for _, c := range All[1:] {
+		if d := haversine(lat, lon, c.Latitude, c.Longitude); d < bestDist {
+			bestDist = d
+			best = c
+		}
+	}
+	return best.Timezone
+}
+
+// haversine returns the great-circle distance (in km) between two points.
+func haversine(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthRadiusKm = 6371.0
+	dLat := (lat2 - lat1) * math.Pi / 180
+	dLon := (lon2 - lon1) * math.Pi / 180
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*math.Pi/180)*math.Cos(lat2*math.Pi/180)*
+			math.Sin(dLon/2)*math.Sin(dLon/2)
+	return 2 * earthRadiusKm * math.Asin(math.Min(1, math.Sqrt(a)))
 }
 
 // All contains a curated list of cities worldwide

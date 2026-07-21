@@ -18,21 +18,21 @@ import (
 
 // Handler holds dependencies for HTTP handlers
 type Handler struct {
-	calculator    *calculator.Calculator
-	bodygraph     *bodygraph.Generator
-	astroCalc     *astrology.Calculator
+	calculator     *calculator.Calculator
+	bodygraph      *bodygraph.Generator
+	astroCalc      *astrology.Calculator
 	astrocartoCalc *astrocartography.Calculator
-	db            *database.Database
+	db             *database.Database
 }
 
 // NewHandler creates a new handler with all dependencies
 func NewHandler(db *database.Database) *Handler {
 	return &Handler{
-		calculator:    calculator.NewCalculator(),
-		bodygraph:     bodygraph.NewGenerator(),
-		astroCalc:     astrology.NewCalculator(),
+		calculator:     calculator.NewCalculator(),
+		bodygraph:      bodygraph.NewGenerator(),
+		astroCalc:      astrology.NewCalculator(),
 		astrocartoCalc: astrocartography.NewCalculator(),
-		db:            db,
+		db:             db,
 	}
 }
 
@@ -492,6 +492,7 @@ func (h *Handler) PeoplePage(w http.ResponseWriter, r *http.Request) {
             <input type="hidden" id="p_latitude" name="latitude">
             <input type="hidden" id="p_longitude" name="longitude">
             <input type="hidden" id="p_location" name="location">
+            <input type="hidden" id="p_timezone" name="timezone">
         </div>
         <div class="form-group">
             <label for="notes">Notes (optional)</label>
@@ -513,6 +514,7 @@ func (h *Handler) PeoplePage(w http.ResponseWriter, r *http.Request) {
     const latInput = document.getElementById('p_latitude');
     const lonInput = document.getElementById('p_longitude');
     const locInput = document.getElementById('p_location');
+    const tzInput = document.getElementById('p_timezone');
 
     function renderDropdown(matches) {
         dropdown.innerHTML = '';
@@ -533,6 +535,7 @@ func (h *Handler) PeoplePage(w http.ResponseWriter, r *http.Request) {
         latInput.value = city.latitude;
         lonInput.value = city.longitude;
         locInput.value = city.name + ', ' + city.country;
+        tzInput.value = city.timezone || '';
         dropdown.classList.remove('open');
     }
 
@@ -573,6 +576,7 @@ func (h *Handler) PeoplePage(w http.ResponseWriter, r *http.Request) {
             name: document.getElementById('name').value,
             birth_date: document.getElementById('p_birthdate').value,
             birth_time: document.getElementById('p_birthtime').value,
+            timezone: tzInput.value,
             location: locInput.value,
             latitude: parseFloat(latInput.value),
             longitude: parseFloat(lonInput.value),
@@ -1017,7 +1021,7 @@ func (h *Handler) HandlePersonChart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dt, err := time.Parse("2006-01-02T15:04:05Z", person.BirthDate+"T"+person.BirthTime+":00Z")
+	dt, err := personBirthUTC(person)
 	if err != nil {
 		http.Error(w, "Invalid date/time for person: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1081,4 +1085,32 @@ func parseDateTime(s string) (time.Time, error) {
 		dt, err = time.Parse("2006-01-02T15:04:05Z", s)
 	}
 	return dt, err
+}
+
+// personBirthUTC converts a stored person's local birth date/time into the
+// correct UTC instant used by the ephemeris.
+//
+// The birth_time is a wall-clock time at the birth location, so it must be
+// interpreted in that location's timezone before being converted to UTC.
+// The timezone is taken from the person's record when present, otherwise it
+// is resolved from the stored location/coordinates. Historically this was
+// parsed directly as UTC, which shifted every non-UTC birth by the zone's
+// offset and produced incorrect gates, profiles and types.
+func personBirthUTC(person *database.Person) (time.Time, error) {
+	tzName := person.Timezone
+	if tzName == "" {
+		tzName = cities.TimezoneFor(person.Location, person.Latitude, person.Longitude)
+	}
+
+	loc, err := time.LoadLocation(tzName)
+	if err != nil {
+		// Fall back to UTC if the zone database is unavailable/unknown.
+		loc = time.UTC
+	}
+
+	local, err := time.ParseInLocation("2006-01-02T15:04", person.BirthDate+"T"+person.BirthTime, loc)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return local.UTC(), nil
 }
